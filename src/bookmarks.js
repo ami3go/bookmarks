@@ -10,6 +10,7 @@ export const DEFAULT_CONFIG = {
     eyebrow: 'Mini PC',
     showEyebrow: true,
     displayMode: 'cards',
+    groupOrder: [],
     services: [],
     history: [],
 };
@@ -56,6 +57,51 @@ export function normalizeDisplayMode(value) {
     return DISPLAY_MODES.includes(value) ? value : DEFAULT_CONFIG.displayMode;
 }
 
+export function serviceGroup(service) {
+    return String(service?.group || '').trim() || 'Ungrouped';
+}
+
+export function groupNames(services) {
+    return [...new Set(services.map(serviceGroup))];
+}
+
+export function normalizeGroupOrder(services, preferredOrder = []) {
+    const available = groupNames(services);
+    const availableSet = new Set(available);
+    const result = [];
+    const seen = new Set();
+
+    if (Array.isArray(preferredOrder)) {
+        for (const value of preferredOrder) {
+            const group = String(value || '').trim();
+            if (availableSet.has(group) && !seen.has(group)) {
+                result.push(group);
+                seen.add(group);
+            }
+        }
+    }
+
+    for (const group of available) {
+        if (!seen.has(group)) {
+            result.push(group);
+            seen.add(group);
+        }
+    }
+
+    return result;
+}
+
+export function moveGroup(groupOrder, group, direction) {
+    const order = [...groupOrder];
+    const index = order.indexOf(group);
+    const target = index + direction;
+    if (index === -1 || target < 0 || target >= order.length)
+        return order;
+
+    [order[index], order[target]] = [order[target], order[index]];
+    return order;
+}
+
 export function normalizeConfig(config) {
     if (!config || typeof config !== 'object' || !Array.isArray(config.services))
         throw new Error('Configuration must contain a services array.');
@@ -67,6 +113,7 @@ export function normalizeConfig(config) {
         eyebrow: String(config.eyebrow ?? DEFAULT_CONFIG.eyebrow),
         showEyebrow: config.showEyebrow !== false,
         displayMode: normalizeDisplayMode(config.displayMode),
+        groupOrder: normalizeGroupOrder(config.services, config.groupOrder),
         services: config.services,
         history: Array.isArray(config.history) ? config.history : [],
     };
@@ -201,14 +248,6 @@ export function duplicateWarnings(draft, services, target, hostname) {
     return warnings;
 }
 
-export function serviceGroup(service) {
-    return String(service?.group || '').trim() || 'Ungrouped';
-}
-
-export function groupNames(services) {
-    return [...new Set(services.map(serviceGroup))];
-}
-
 export function moveService(services, fromIndex, toIndex) {
     if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 ||
         fromIndex >= services.length || toIndex >= services.length)
@@ -227,6 +266,7 @@ function snapshotConfig(config) {
         eyebrow: config.eyebrow,
         showEyebrow: config.showEyebrow,
         displayMode: config.displayMode,
+        groupOrder: [...config.groupOrder],
         services: JSON.parse(JSON.stringify(config.services)),
     };
 }
@@ -256,11 +296,13 @@ export function restoreHistoryEntry(current, entry) {
     if (!entry?.config || !Array.isArray(entry.config.services))
         throw new Error('This history entry is invalid.');
 
+    const services = JSON.parse(JSON.stringify(entry.config.services));
     return {
         ...normalizeConfig(current),
         ...entry.config,
         displayMode: normalizeDisplayMode(entry.config.displayMode),
-        services: JSON.parse(JSON.stringify(entry.config.services)),
+        groupOrder: normalizeGroupOrder(services, entry.config.groupOrder),
+        services,
         history: current.history,
     };
 }
@@ -283,6 +325,7 @@ export function normalizeImportedConfig(value, hostname) {
 
     return {
         ...config,
+        groupOrder: normalizeGroupOrder(services, config.groupOrder),
         services,
         history: Array.isArray(config.history) ? config.history.slice(-HISTORY_LIMIT) : [],
     };
