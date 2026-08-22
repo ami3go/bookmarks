@@ -10,10 +10,13 @@ The project follows semantic versioning where practical.
 
 - Optional compact card display density, configurable from Page settings.
 - Display density is stored in the JSON configuration and included in import/export and history snapshots.
+- Explicit group ordering with Move group up / Move group down controls in edit mode.
+- Optional top-level `groupOrder` configuration that appends new groups predictably and removes stale group names automatically.
 
 ### Changed
 
 - Compact mode reduces card width, spacing, icon size, and description footprint so larger service collections fit on screen more efficiently.
+- Group section order is independent of bookmark order while remaining backward compatible with v0.4 configurations.
 
 ## [0.4.0] - 2026-08-22
 
