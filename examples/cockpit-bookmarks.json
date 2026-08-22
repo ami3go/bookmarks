@@ -1,0 +1,20 @@
+{
+  "title": "Mini PC Services",
+  "subtitle": "Services hosted on this mini PC",
+  "services": [
+    {
+      "name": "Grafana",
+      "description": "Metrics and dashboards",
+      "url": "http://{host}:3000",
+      "icon": "📊",
+      "group": "Monitoring"
+    },
+    {
+      "name": "Example Service",
+      "description": "Replace this entry with a service running on your mini PC",
+      "url": "http://{host}:8080",
+      "icon": "🔗",
+      "group": "Apps"
+    }
+  ]
+}
