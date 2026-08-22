@@ -2,6 +2,7 @@ PACKAGE_NAME := cockpit-bookmarks
 PREFIX ?= /usr/local
 CONFIG_DIR ?= /etc/cockpit
 CONFIG_FILE := $(CONFIG_DIR)/cockpit-bookmarks.json
+LEGACY_CONFIG_FILE := $(CONFIG_DIR)/local-services.json
 
 .PHONY: all dist watch install install-config devel-install devel-uninstall uninstall clean
 
@@ -22,8 +23,13 @@ install: dist
 install-config:
 	install -d "$(DESTDIR)$(CONFIG_DIR)"
 	@if [ ! -e "$(DESTDIR)$(CONFIG_FILE)" ]; then \
-		install -m 0644 examples/cockpit-bookmarks.json "$(DESTDIR)$(CONFIG_FILE)"; \
-		echo "Created $(DESTDIR)$(CONFIG_FILE)"; \
+		if [ -e "$(DESTDIR)$(LEGACY_CONFIG_FILE)" ]; then \
+			cp -p "$(DESTDIR)$(LEGACY_CONFIG_FILE)" "$(DESTDIR)$(CONFIG_FILE)"; \
+			echo "Migrated $(DESTDIR)$(LEGACY_CONFIG_FILE) -> $(DESTDIR)$(CONFIG_FILE)"; \
+		else \
+			install -m 0644 examples/cockpit-bookmarks.json "$(DESTDIR)$(CONFIG_FILE)"; \
+			echo "Created $(DESTDIR)$(CONFIG_FILE)"; \
+		fi; \
 	else \
 		echo "Keeping existing $(DESTDIR)$(CONFIG_FILE)"; \
 	fi
