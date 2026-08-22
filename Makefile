@@ -3,7 +3,7 @@ PREFIX ?= /usr/local
 CONFIG_DIR ?= /etc/cockpit
 CONFIG_FILE := $(CONFIG_DIR)/cockpit-bookmarks.json
 LEGACY_CONFIG_FILE := $(CONFIG_DIR)/local-services.json
-VERSION := $(shell node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
+VERSION := $(shell sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)
 RELEASE_DIR := release
 RELEASE_NAME := $(PACKAGE_NAME)-$(VERSION)
 RELEASE_ARCHIVE := $(RELEASE_DIR)/$(RELEASE_NAME).tar.gz
@@ -59,7 +59,7 @@ release: clean
 	rm -rf "$(RELEASE_DIR)/$(RELEASE_NAME)"
 	mkdir -p "$(RELEASE_DIR)/$(RELEASE_NAME)"
 	cp -r dist examples "$(RELEASE_DIR)/$(RELEASE_NAME)/"
-	cp Makefile README.md ROADMAP.md CHANGELOG.md SECURITY.md LICENSE "$(RELEASE_DIR)/$(RELEASE_NAME)/"
+	cp Makefile package.json README.md ROADMAP.md CHANGELOG.md SECURITY.md LICENSE "$(RELEASE_DIR)/$(RELEASE_NAME)/"
 	tar -C "$(RELEASE_DIR)" -czf "$(RELEASE_ARCHIVE)" "$(RELEASE_NAME)"
 	rm -rf "$(RELEASE_DIR)/$(RELEASE_NAME)"
 	@echo "Created $(RELEASE_ARCHIVE)"
