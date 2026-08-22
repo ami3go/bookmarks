@@ -27,6 +27,19 @@ const CONFIG_SYNTAX = {
     stringify: value => `${JSON.stringify(value, null, 2)}\n`,
 };
 
+function PencilIcon() {
+    return (
+        <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            focusable="false"
+            fill="currentColor"
+        >
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-10.04a.996.996 0 0 0 0-1.41l-2.5-2.5a.996.996 0 0 0-1.41 0l-1.96 1.96 3.75 3.75 2.12-1.8Z" />
+        </svg>
+    );
+}
+
 function miniPcHost() {
     const hostname = window.location.hostname;
     return hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname;
@@ -131,6 +144,7 @@ export const Application = () => {
     const [query, setQuery] = useState('');
     const [notice, setNotice] = useState(null);
     const [canEdit, setCanEdit] = useState(null);
+    const [editMode, setEditMode] = useState(false);
     const [editor, setEditor] = useState(null);
     const [draft, setDraft] = useState(EMPTY_BOOKMARK);
     const [formErrors, setFormErrors] = useState({});
@@ -173,7 +187,11 @@ export const Application = () => {
 
     useEffect(() => {
         const permission = window.cockpit.permission({ admin: true });
-        const updatePermission = () => setCanEdit(permission.allowed);
+        const updatePermission = () => {
+            setCanEdit(permission.allowed);
+            if (!permission.allowed)
+                setEditMode(false);
+        };
 
         updatePermission();
         permission.addEventListener('changed', updatePermission);
@@ -237,6 +255,9 @@ export const Application = () => {
     };
 
     const openEdit = service => {
+        if (!editMode || canEdit !== true)
+            return;
+
         const { sourceIndex, resolvedUrl, ...storedService } = service;
         setDraft(editableBookmark(storedService));
         setFormErrors({});
@@ -285,6 +306,9 @@ export const Application = () => {
     };
 
     const requestDelete = service => {
+        if (!editMode || canEdit !== true)
+            return;
+
         const { sourceIndex, resolvedUrl, ...storedService } = service;
         setDeleteTarget({ index: sourceIndex, service: storedService });
     };
@@ -326,6 +350,17 @@ export const Application = () => {
                         >
                             Add bookmark
                         </Button>
+                        <Button
+                            variant={editMode ? 'secondary' : 'plain'}
+                            className="bookmark-edit-mode-toggle"
+                            onClick={() => setEditMode(current => !current)}
+                            isDisabled={canEdit !== true}
+                            aria-label={editMode ? 'Disable edit mode' : 'Enable edit mode'}
+                            aria-pressed={editMode}
+                            title={editMode ? 'Disable edit mode' : 'Enable edit mode'}
+                        >
+                            <PencilIcon />
+                        </Button>
                     </div>
                 </header>
 
@@ -361,8 +396,23 @@ export const Application = () => {
                                         </div>
                                         {canEdit === true && (
                                             <div className="bookmark-card-actions">
-                                                <Button variant="link" isInline onClick={() => openEdit(service)}>Edit</Button>
-                                                <Button variant="link" isDanger isInline onClick={() => requestDelete(service)}>Delete</Button>
+                                                <Button
+                                                    variant="link"
+                                                    isInline
+                                                    isDisabled={!editMode || saving}
+                                                    onClick={() => openEdit(service)}
+                                                >
+                                                    Edit
+                                                </Button>
+                                                <Button
+                                                    variant="link"
+                                                    isDanger
+                                                    isInline
+                                                    isDisabled={!editMode || saving}
+                                                    onClick={() => requestDelete(service)}
+                                                >
+                                                    Delete
+                                                </Button>
                                             </div>
                                         )}
                                     </div>
