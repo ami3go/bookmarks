@@ -9,6 +9,7 @@ import {
     expandUrl,
     moveService,
     normalizeConfig,
+    normalizeDisplayMode,
     normalizeImportedConfig,
     restoreHistoryEntry,
     storedBookmark,
@@ -33,7 +34,15 @@ test('normalizes legacy configurations without new fields', () => {
     assert.equal(config.title, DEFAULT_CONFIG.title);
     assert.equal(config.eyebrow, 'Mini PC');
     assert.equal(config.showEyebrow, true);
+    assert.equal(config.displayMode, 'cards');
     assert.deepEqual(config.history, []);
+});
+
+test('normalizes supported display modes and rejects unknown modes', () => {
+    assert.equal(normalizeDisplayMode('cards'), 'cards');
+    assert.equal(normalizeDisplayMode('compact'), 'compact');
+    assert.equal(normalizeDisplayMode('unknown'), 'cards');
+    assert.equal(normalizeConfig({ displayMode: 'compact', services: [] }).displayMode, 'compact');
 });
 
 test('stores tags as a unique array and keeps unknown service fields', () => {
@@ -77,30 +86,35 @@ test('moves services without mutating the input array', () => {
     assert.deepEqual(services, ['a', 'b', 'c']);
 });
 
-test('records and restores configuration history', () => {
+test('records and restores configuration history including display mode', () => {
     const current = normalizeConfig({
         title: 'Before',
+        displayMode: 'cards',
         services: [{ id: '1', name: 'One', url: 'http://one.test' }],
     });
-    const next = { ...current, title: 'After' };
-    const changed = withHistory(current, next, 'Changed title');
+    const next = { ...current, title: 'After', displayMode: 'compact' };
+    const changed = withHistory(current, next, 'Changed title and display mode');
 
     assert.equal(changed.history.length, 1);
-    assert.equal(changed.history[0].action, 'Changed title');
+    assert.equal(changed.history[0].action, 'Changed title and display mode');
     assert.equal(changed.history[0].config.title, 'Before');
+    assert.equal(changed.history[0].config.displayMode, 'cards');
 
     const restored = restoreHistoryEntry(changed, changed.history[0]);
     assert.equal(restored.title, 'Before');
+    assert.equal(restored.displayMode, 'cards');
     assert.equal(restored.services[0].name, 'One');
 });
 
 test('normalizes imported bookmarks and assigns stable IDs', () => {
     const imported = normalizeImportedConfig({
         title: 'Imported',
+        displayMode: 'compact',
         services: [{ name: 'App', url: 'http://{host}:8080', tags: ['one', 'two'] }],
     }, 'mini-pc');
 
     assert.equal(imported.title, 'Imported');
+    assert.equal(imported.displayMode, 'compact');
     assert.ok(imported.services[0].id);
     assert.deepEqual(imported.services[0].tags, ['one', 'two']);
 });
