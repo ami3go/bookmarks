@@ -13,6 +13,7 @@ import {
     CONFIG_PATH,
     CONFIG_SYNTAX,
     DEFAULT_CONFIG,
+    DISPLAY_MODES,
     EDIT_MODE_TIMEOUT_MS,
     EMPTY_BOOKMARK,
     ICON_PRESETS,
@@ -85,6 +86,7 @@ export const Application = () => {
         subtitle: DEFAULT_CONFIG.subtitle,
         eyebrow: DEFAULT_CONFIG.eyebrow,
         showEyebrow: true,
+        displayMode: DEFAULT_CONFIG.displayMode,
     });
     const [settingsError, setSettingsError] = useState('');
     const [importCandidate, setImportCandidate] = useState(null);
@@ -216,6 +218,7 @@ export const Application = () => {
         [draft, config.services, currentTarget, hostname]
     );
     const resolvedPreview = draft.url.trim() ? expandUrl(draft.url.trim(), hostname) : '';
+    const compactMode = config.displayMode === 'compact';
 
     const modifyConfig = (transform, successText, onSuccess, action = successText) => {
         const file = window.cockpit.file(CONFIG_PATH, {
@@ -402,6 +405,7 @@ export const Application = () => {
             subtitle: config.subtitle,
             eyebrow: config.eyebrow,
             showEyebrow: config.showEyebrow,
+            displayMode: config.displayMode,
         });
         setSettingsError('');
         setSettingsOpen(true);
@@ -420,6 +424,7 @@ export const Application = () => {
             subtitle: settingsDraft.subtitle.trim(),
             eyebrow: settingsDraft.eyebrow.trim(),
             showEyebrow: settingsDraft.showEyebrow,
+            displayMode: settingsDraft.displayMode,
         }), 'Page settings updated.', () => setSettingsOpen(false), 'Updated page settings');
     };
 
@@ -582,7 +587,13 @@ export const Application = () => {
                                     <h2 id={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>{group}</h2>
                                     <span>{groupServices.length}</span>
                                 </div>
-                                <div className="bookmarks-grid">
+                                <div
+                                    className="bookmarks-grid"
+                                    style={compactMode ? {
+                                        gridTemplateColumns: 'repeat(auto-fill, minmax(13rem, 1fr))',
+                                        gap: '0.65rem',
+                                    } : undefined}
+                                >
                                     {groupServices.map(service => {
                                         const siblingIndexes = config.services
                                             .map((item, index) => ({ item, index }))
@@ -644,10 +655,21 @@ export const Application = () => {
                                                     setDragSource(null);
                                                 }}
                                             >
-                                                <CardTitle>
+                                                <CardTitle style={compactMode ? { padding: '0.65rem 0.75rem 0.35rem' } : undefined}>
                                                     <div className="bookmark-title-row">
                                                         <div className="bookmark-title-main">
-                                                            <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
+                                                            <span
+                                                                className="bookmark-icon"
+                                                                aria-hidden="true"
+                                                                style={compactMode ? {
+                                                                    width: '1.5rem',
+                                                                    height: '1.5rem',
+                                                                    marginRight: '0.45rem',
+                                                                    fontSize: '1rem',
+                                                                } : undefined}
+                                                            >
+                                                                {service.icon || '↗'}
+                                                            </span>
                                                             <span>{service.name || 'Unnamed service'}</span>
                                                         </div>
                                                         {editMode && canEdit === true && (
@@ -718,9 +740,23 @@ export const Application = () => {
                                                         )}
                                                     </div>
                                                 </CardTitle>
-                                                <CardBody>
-                                                    <p className="bookmark-description">{service.description || service.resolvedUrl}</p>
-                                                    <div className="bookmark-meta">
+                                                <CardBody style={compactMode ? { padding: '0 0.75rem 0.65rem' } : undefined}>
+                                                    <p
+                                                        className="bookmark-description"
+                                                        style={compactMode ? {
+                                                            fontSize: '0.82rem',
+                                                            lineHeight: 1.35,
+                                                            overflow: 'hidden',
+                                                            textOverflow: 'ellipsis',
+                                                            whiteSpace: 'nowrap',
+                                                        } : undefined}
+                                                    >
+                                                        {service.description || service.resolvedUrl}
+                                                    </p>
+                                                    <div
+                                                        className="bookmark-meta"
+                                                        style={compactMode ? { marginTop: '0.5rem' } : undefined}
+                                                    >
                                                         {Array.isArray(service.tags) && service.tags.map(tag => (
                                                             <span className="bookmark-tag" key={tag}>{tag}</span>
                                                         ))}
@@ -894,6 +930,23 @@ export const Application = () => {
                             />
                             <span>Show eyebrow above the page title</span>
                         </label>
+                        <FormGroup label="Display density" fieldId="settings-display-mode">
+                            <select
+                                id="settings-display-mode"
+                                value={settingsDraft.displayMode}
+                                onChange={event => setSettingsDraft(current => ({ ...current, displayMode: event.target.value }))}
+                                style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
+                            >
+                                {DISPLAY_MODES.map(mode => (
+                                    <option value={mode} key={mode}>
+                                        {mode === 'compact' ? 'Compact cards' : 'Standard cards'}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="bookmark-field-help">
+                                Compact cards fit more services on screen while keeping groups and management controls.
+                            </div>
+                        </FormGroup>
                     </Form>
                 </ModalBody>
                 <ModalFooter>
