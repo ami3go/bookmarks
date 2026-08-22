@@ -1,6 +1,6 @@
 "use strict";
 
-const CONFIG_PATH = "/etc/cockpit/local-services.json";
+const CONFIG_PATH = "/etc/cockpit/cockpit-bookmarks.json";
 const grid = document.getElementById("service-grid");
 const notice = document.getElementById("notice");
 const emptyState = document.getElementById("empty-state");
@@ -122,7 +122,7 @@ function loadConfig() {
 
       const normalized = normalizeConfig(config);
       services = normalized.services;
-      pageTitle.textContent = normalized.title || "Local Services";
+      pageTitle.textContent = normalized.title || "Cockpit Bookmarks";
       pageSubtitle.textContent = normalized.subtitle || "Quick links to services hosted on this machine.";
       render();
     })
