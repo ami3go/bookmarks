@@ -7,9 +7,11 @@ import {
     duplicateWarnings,
     editableBookmark,
     expandUrl,
+    moveGroup,
     moveService,
     normalizeConfig,
     normalizeDisplayMode,
+    normalizeGroupOrder,
     normalizeImportedConfig,
     restoreHistoryEntry,
     storedBookmark,
@@ -35,6 +37,7 @@ test('normalizes legacy configurations without new fields', () => {
     assert.equal(config.eyebrow, 'Mini PC');
     assert.equal(config.showEyebrow, true);
     assert.equal(config.displayMode, 'cards');
+    assert.deepEqual(config.groupOrder, []);
     assert.deepEqual(config.history, []);
 });
 
@@ -43,6 +46,27 @@ test('normalizes supported display modes and rejects unknown modes', () => {
     assert.equal(normalizeDisplayMode('compact'), 'compact');
     assert.equal(normalizeDisplayMode('unknown'), 'cards');
     assert.equal(normalizeConfig({ displayMode: 'compact', services: [] }).displayMode, 'compact');
+});
+
+test('normalizes explicit group order and appends new groups predictably', () => {
+    const services = [
+        { name: 'Grafana', group: 'Monitoring' },
+        { name: 'Files', group: 'Storage' },
+        { name: 'Home', group: 'Apps' },
+    ];
+
+    assert.deepEqual(
+        normalizeGroupOrder(services, ['Storage', 'Missing', 'Storage', 'Monitoring']),
+        ['Storage', 'Monitoring', 'Apps']
+    );
+    assert.deepEqual(normalizeGroupOrder(services), ['Monitoring', 'Storage', 'Apps']);
+});
+
+test('moves groups without mutating the input order', () => {
+    const groups = ['Monitoring', 'Storage', 'Apps'];
+    assert.deepEqual(moveGroup(groups, 'Storage', -1), ['Storage', 'Monitoring', 'Apps']);
+    assert.deepEqual(moveGroup(groups, 'Storage', 1), ['Monitoring', 'Apps', 'Storage']);
+    assert.deepEqual(groups, ['Monitoring', 'Storage', 'Apps']);
 });
 
 test('stores tags as a unique array and keeps unknown service fields', () => {
@@ -86,35 +110,51 @@ test('moves services without mutating the input array', () => {
     assert.deepEqual(services, ['a', 'b', 'c']);
 });
 
-test('records and restores configuration history including display mode', () => {
+test('records and restores configuration history including display and group order', () => {
     const current = normalizeConfig({
         title: 'Before',
         displayMode: 'cards',
-        services: [{ id: '1', name: 'One', url: 'http://one.test' }],
+        groupOrder: ['Storage', 'Monitoring'],
+        services: [
+            { id: '1', name: 'One', url: 'http://one.test', group: 'Monitoring' },
+            { id: '2', name: 'Two', url: 'http://two.test', group: 'Storage' },
+        ],
     });
-    const next = { ...current, title: 'After', displayMode: 'compact' };
-    const changed = withHistory(current, next, 'Changed title and display mode');
+    const next = {
+        ...current,
+        title: 'After',
+        displayMode: 'compact',
+        groupOrder: ['Monitoring', 'Storage'],
+    };
+    const changed = withHistory(current, next, 'Changed page layout');
 
     assert.equal(changed.history.length, 1);
-    assert.equal(changed.history[0].action, 'Changed title and display mode');
+    assert.equal(changed.history[0].action, 'Changed page layout');
     assert.equal(changed.history[0].config.title, 'Before');
     assert.equal(changed.history[0].config.displayMode, 'cards');
+    assert.deepEqual(changed.history[0].config.groupOrder, ['Storage', 'Monitoring']);
 
     const restored = restoreHistoryEntry(changed, changed.history[0]);
     assert.equal(restored.title, 'Before');
     assert.equal(restored.displayMode, 'cards');
+    assert.deepEqual(restored.groupOrder, ['Storage', 'Monitoring']);
     assert.equal(restored.services[0].name, 'One');
 });
 
-test('normalizes imported bookmarks and assigns stable IDs', () => {
+test('normalizes imported bookmarks and preserves group order', () => {
     const imported = normalizeImportedConfig({
         title: 'Imported',
         displayMode: 'compact',
-        services: [{ name: 'App', url: 'http://{host}:8080', tags: ['one', 'two'] }],
+        groupOrder: ['Apps', 'Monitoring'],
+        services: [
+            { name: 'Grafana', url: 'http://{host}:3000', group: 'Monitoring' },
+            { name: 'App', url: 'http://{host}:8080', group: 'Apps', tags: ['one', 'two'] },
+        ],
     }, 'mini-pc');
 
     assert.equal(imported.title, 'Imported');
     assert.equal(imported.displayMode, 'compact');
-    assert.ok(imported.services[0].id);
-    assert.deepEqual(imported.services[0].tags, ['one', 'two']);
+    assert.deepEqual(imported.groupOrder, ['Apps', 'Monitoring']);
+    assert.ok(imported.services[1].id);
+    assert.deepEqual(imported.services[1].tags, ['one', 'two']);
 });
