@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Local Services</title>
+  <title>Cockpit Bookmarks</title>
   <link rel="stylesheet" href="style.css">
   <script src="../base1/cockpit.js"></script>
   <script src="app.js" defer></script>
@@ -13,21 +13,21 @@
     <header class="page-header">
       <div>
         <p class="eyebrow">Mini PC</p>
-        <h1 id="page-title">Local Services</h1>
+        <h1 id="page-title">Cockpit Bookmarks</h1>
         <p id="page-subtitle" class="subtitle">Quick links to services hosted on this machine.</p>
       </div>
       <label class="search-wrap" for="service-search">
-        <span class="sr-only">Filter services</span>
-        <input id="service-search" type="search" placeholder="Filter services…" autocomplete="off">
+        <span class="sr-only">Filter bookmarks</span>
+        <input id="service-search" type="search" placeholder="Filter bookmarks…" autocomplete="off">
       </label>
     </header>
 
     <section id="notice" class="notice" hidden></section>
     <section id="service-grid" class="service-grid" aria-live="polite"></section>
-    <p id="empty-state" class="empty-state" hidden>No matching services.</p>
+    <p id="empty-state" class="empty-state" hidden>No matching bookmarks.</p>
 
     <footer class="page-footer">
-      Configuration: <code>/etc/cockpit/local-services.json</code>
+      Configuration: <code>/etc/cockpit/cockpit-bookmarks.json</code>
     </footer>
   </main>
 </body>
