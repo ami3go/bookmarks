@@ -4,6 +4,17 @@ All notable changes to Cockpit Bookmarks are documented here.
 
 The project follows semantic versioning where practical.
 
+## [0.5.0] - Unreleased
+
+### Added
+
+- Optional compact card display density, configurable from Page settings.
+- Display density is stored in the JSON configuration and included in import/export and history snapshots.
+
+### Changed
+
+- Compact mode reduces card width, spacing, icon size, and description footprint so larger service collections fit on screen more efficiently.
+
 ## [0.4.0] - 2026-08-22
 
 ### Added
