@@ -15,11 +15,12 @@ Status: active development on `v0.5-development`. The released `v0.4.0` tag rema
 
 ### Phase 2 — explicit group ordering
 
-- [ ] Store optional top-level group order without changing bookmark group names
-- [ ] Add Move group up / Move group down controls in edit mode
-- [ ] Keep unknown/new groups predictable when no explicit order exists
-- [ ] Preserve group order through import/export and history
-- [ ] Add unit tests for group ordering
+- [x] Store optional top-level group order without changing bookmark group names
+- [x] Add Move group up / Move group down controls in edit mode
+- [x] Keep unknown/new groups predictable when no explicit order exists
+- [x] Preserve group order through import/export and history
+- [x] Add unit tests for group ordering
+- [ ] Smoke-test group ordering in Cockpit
 
 ### Phase 3 — live configuration integration
 
