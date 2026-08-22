@@ -106,29 +106,32 @@ function normalizeConfig(config) {
   return config;
 }
 
-async function loadConfig() {
-  try {
-    const file = cockpit.file(CONFIG_PATH, { syntax: JSON, max_read_size: 262144 });
-    const [config] = await file.read();
-    file.close();
+function loadConfig() {
+  const file = cockpit.file(CONFIG_PATH, { syntax: JSON, max_read_size: 262144 });
 
-    if (config === null) {
-      services = [];
-      showNotice(`No configuration found. Create ${CONFIG_PATH} from examples/services.json.`);
+  file.read()
+    .then((config) => {
+      file.close();
+
+      if (config === null) {
+        services = [];
+        showNotice(`No configuration found. Create ${CONFIG_PATH} from examples/services.json.`);
+        render();
+        return;
+      }
+
+      const normalized = normalizeConfig(config);
+      services = normalized.services;
+      pageTitle.textContent = normalized.title || "Local Services";
+      pageSubtitle.textContent = normalized.subtitle || "Quick links to services hosted on this machine.";
       render();
-      return;
-    }
-
-    const normalized = normalizeConfig(config);
-    services = normalized.services;
-    pageTitle.textContent = normalized.title || "Local Services";
-    pageSubtitle.textContent = normalized.subtitle || "Quick links to services hosted on this machine.";
-    render();
-  } catch (error) {
-    services = [];
-    showNotice(`Could not load ${CONFIG_PATH}: ${cockpit.message(error)}`, true);
-    render();
-  }
+    })
+    .catch((error) => {
+      file.close();
+      services = [];
+      showNotice(`Could not load ${CONFIG_PATH}: ${cockpit.message(error)}`, true);
+      render();
+    });
 }
 
 search.addEventListener("input", () => render(search.value));
