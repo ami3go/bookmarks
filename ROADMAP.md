@@ -2,7 +2,7 @@
 
 ## v0.4.0 — management release
 
-Status: merged to `main`. Local helper tests and JavaScript/JSX syntax checks passed; full npm/esbuild and Cockpit smoke testing are still pending.
+Status: feature implementation is on `main`; release engineering is being finalized on `release-hardening`. Reproducible install, unit tests, production build, prebuilt packaging, Node-free artifact installation, and uninstall/config-preservation checks pass in GitHub Actions. A real Cockpit runtime smoke test remains before tagging the release.
 
 ### Phase 1 — safer editing
 
@@ -47,24 +47,48 @@ Status: merged to `main`. Local helper tests and JavaScript/JSX syntax checks pa
 - [x] Add searchable tags as optional metadata
 - [x] Improve first-run and no-results empty states
 
-### Phase 6 — maintainability
+### Phase 6 — maintainability and release engineering
 
 - [x] Move pure bookmark/configuration logic into `src/bookmarks.js`
 - [x] Add dependency-free Node tests
+- [x] Commit `package-lock.json` for reproducible installs
+- [x] Use `npm ci` for deterministic builds
+- [x] Add GitHub Actions test/build/package CI
+- [x] Build a precompiled release tarball
+- [x] Verify prebuilt installation without Node.js in `PATH`
+- [x] Verify uninstall preserves system configuration
+- [x] Add changelog, security policy, and release procedure
+- [x] Replace the previously adapted theme helper with an independently written MIT implementation
 - [x] Keep the installed application static
 - [x] Keep JSON as the only persistent storage
 - [x] Avoid Docker, a database, a daemon, or an API server
 
 ## Verification before release
 
-- [x] JavaScript/JSX syntax review
-- [x] Unit tests added for pure configuration logic
-- [x] Run the helper test suite locally (9/9 passing)
-- [ ] Run `npm test` from a fresh checkout
-- [ ] Run `make clean && make` with npm registry access
-- [ ] Install with `sudo make install install-config`
-- [ ] Smoke-test add/edit/delete/reorder/import/restore in Cockpit
-- [ ] Check responsive layout on desktop and narrow/mobile widths
+### Automated
+
+- [x] Unit test suite passes from a clean CI checkout
+- [x] `npm ci` succeeds from the committed lockfile
+- [x] Production esbuild bundle succeeds
+- [x] Expected `dist/` files are present and production source maps are absent
+- [x] Release tarball is generated and its required contents are checked
+- [x] Prebuilt archive installs with Node.js removed from `PATH`
+- [x] Uninstall removes the plugin while preserving `/etc/cockpit/cockpit-bookmarks.json`
+- [x] Reinstall keeps an existing configuration unchanged
+
+### Real Cockpit host
+
+- [ ] Install the CI-produced prebuilt tarball on a real Cockpit host
+- [ ] Record Cockpit and operating-system versions used for the release smoke test
+- [ ] Smoke-test card opening, search, and group filtering
+- [ ] Smoke-test add/edit/delete and edit-mode locking
+- [ ] Smoke-test drag and keyboard reorder controls
+- [ ] Smoke-test page settings, import/export, and history restore
+- [ ] Verify a non-administrator account remains read-only
+- [ ] Check light/dark/auto theme behavior
+- [ ] Check desktop and narrow/mobile layouts
+
+See `RELEASING.md` for the complete release procedure.
 
 ## Known constraints
 
@@ -90,9 +114,7 @@ Deferred. The current icon field supports emoji and text. Uploading arbitrary fi
 
 ## Possible post-v0.4 work
 
-- prebuilt release archive so production machines do not need Node/npm
-- GitHub Actions build/test workflow
-- committed `package-lock.json` for reproducible builds
-- optional group ordering controls
+- optional explicit group ordering controls
 - optional compact/list display mode
 - localization/i18n if the project grows beyond personal/community use
+- broader automated Cockpit runtime/integration coverage if the project gains multiple supported distro targets
