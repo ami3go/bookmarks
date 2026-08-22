@@ -4,6 +4,7 @@
   "eyebrow": "Mini PC",
   "showEyebrow": true,
   "displayMode": "cards",
+  "groupOrder": ["Apps", "Monitoring"],
   "services": [
     {
       "name": "Grafana",
