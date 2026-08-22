@@ -4,8 +4,8 @@
     "cockpit": "239"
   },
   "tools": {
-    "local-services": {
-      "label": "Local Services",
+    "bookmarks": {
+      "label": "Bookmarks",
       "order": 55,
       "path": "index.html",
       "keywords": [
