@@ -69,11 +69,17 @@
 
 .bookmark-card {
     height: 100%;
+    cursor: pointer;
     transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
 .bookmark-card:hover {
     transform: translateY(-2px);
+}
+
+.bookmark-card:focus-visible {
+    outline: 2px solid currentcolor;
+    outline-offset: 3px;
 }
 
 .bookmark-title-row {
@@ -118,7 +124,6 @@
 .bookmark-meta {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 0.75rem;
     margin-top: 1rem;
     font-size: 0.8rem;
@@ -129,11 +134,6 @@
     border: 1px solid currentcolor;
     border-radius: 999px;
     opacity: 0.7;
-}
-
-.bookmark-open {
-    margin-left: auto;
-    font-weight: 600;
 }
 
 .bookmark-field-error,
