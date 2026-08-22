@@ -1,8 +1,8 @@
-# Cockpit Bookmarks — Starter Kit trial
+# Cockpit Bookmarks
 
-This branch is a trial refactor of **Cockpit Bookmarks** toward the official Cockpit Starter Kit development model.
+A lightweight Cockpit extension for organizing links to web services hosted on a mini PC or server.
 
-It keeps the plugin lightweight at runtime:
+It stays small at runtime:
 
 - no Docker
 - no daemon or background service
@@ -10,29 +10,20 @@ It keeps the plugin lightweight at runtime:
 - no Node.js process after installation
 - no Python runtime
 
-React, PatternFly, Node.js and esbuild are **build-time dependencies only**. The build output is static HTML/CSS/JavaScript served by Cockpit from `dist/`.
+React, PatternFly, Node.js and esbuild are **build-time dependencies only**. The installed application is static HTML/CSS/JavaScript served by Cockpit.
 
-## What changed in this branch
+## Features
 
-The application source now lives under `src/`, builds into `dist/`, uses React + PatternFly 6, follows Cockpit's current dark/light theme, and provides Starter-Kit-style `make` targets for development and installation.
-
-This is intentionally a smaller scaffold than the full upstream Starter Kit. RPM/Packit packaging, translations, VM integration tests and release automation are not included yet.
-
-## Branch safety
-
-The existing implementation remains untouched on `main`.
-
-To try this version:
-
-```bash
-git switch starter-kit-trial
-```
-
-To return to the current implementation:
-
-```bash
-git switch main
-```
+- Cockpit-style React + PatternFly 6 interface
+- follows Cockpit light/dark theme
+- search/filter bookmarks
+- add bookmarks from the Cockpit UI
+- edit existing bookmarks
+- delete bookmarks with confirmation
+- administrator-only configuration changes
+- atomic JSON updates through Cockpit's file API
+- `{host}` substitution for the mini PC hostname/IP address
+- no application server or database
 
 ## Build
 
@@ -60,7 +51,7 @@ NODE_ENV=production make clean all
 
 ## Development install
 
-Install the built `dist/` tree for your current user:
+Build and link the application into Cockpit for your current user:
 
 ```bash
 make devel-install
@@ -101,9 +92,27 @@ The bookmark configuration is stored at:
 /etc/cockpit/cockpit-bookmarks.json
 ```
 
-## Configure bookmarks
+## Add, edit, and delete bookmarks
 
-Edit:
+Users who can obtain Cockpit administrator privileges get an **Add bookmark** button plus **Edit** and **Delete** actions on each card.
+
+Changes are written to `/etc/cockpit/cockpit-bookmarks.json` using Cockpit's privileged `cockpit.file()` API with atomic `modify()` operations. The configuration file therefore stays root-owned; it does not need to be made globally writable.
+
+Users without administrator privileges can still browse and open bookmarks, but the page operates in read-only mode.
+
+The editor supports:
+
+- `name` — required display name
+- `url` — required `http://` or `https://` URL
+- `description` — optional secondary text
+- `group` — optional category
+- `icon` — optional text or emoji
+
+New bookmarks receive an internal `id` automatically. Existing entries without an `id` remain compatible and receive one the next time they are edited.
+
+## Manual configuration
+
+The JSON file remains intentionally human-readable and can still be edited manually:
 
 ```bash
 sudo nano /etc/cockpit/cockpit-bookmarks.json
@@ -117,6 +126,7 @@ Example:
   "subtitle": "Services hosted on this mini PC",
   "services": [
     {
+      "id": "grafana",
       "name": "Grafana",
       "description": "Metrics and dashboards",
       "url": "http://{host}:3000",
@@ -126,6 +136,8 @@ Example:
   ]
 }
 ```
+
+`id` is optional for manually created entries.
 
 `{host}` is replaced in the browser with the hostname or IP address used to open Cockpit. For example, when Cockpit is open at `https://192.168.1.50:9090`, `http://{host}:3000` becomes `http://192.168.1.50:3000`.
 
