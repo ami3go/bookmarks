@@ -326,6 +326,10 @@ export const Application = () => {
         }, 'Bookmark deleted.', () => setDeleteTarget(null));
     };
 
+    const openService = service => {
+        window.open(service.resolvedUrl, '_blank', 'noopener,noreferrer');
+    };
+
     return (
         <Page className="pf-m-no-sidebar">
             <main className="bookmarks-page">
@@ -387,7 +391,20 @@ export const Application = () => {
                 {services.length > 0 ? (
                     <section className="bookmarks-grid" aria-label="Service bookmarks">
                         {services.map(service => (
-                            <Card className="bookmark-card" key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}>
+                            <Card
+                                className="bookmark-card"
+                                key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
+                                role="link"
+                                tabIndex={0}
+                                aria-label={`Open ${service.name || 'service'} in a new tab`}
+                                onClick={() => openService(service)}
+                                onKeyDown={event => {
+                                    if (event.key === 'Enter') {
+                                        event.preventDefault();
+                                        openService(service);
+                                    }
+                                }}
+                            >
                                 <CardTitle>
                                     <div className="bookmark-title-row">
                                         <div className="bookmark-title-main">
@@ -395,7 +412,11 @@ export const Application = () => {
                                             <span>{service.name || 'Unnamed service'}</span>
                                         </div>
                                         {canEdit === true && (
-                                            <div className="bookmark-card-actions">
+                                            <div
+                                                className="bookmark-card-actions"
+                                                onClick={event => event.stopPropagation()}
+                                                onKeyDown={event => event.stopPropagation()}
+                                            >
                                                 <Button
                                                     variant="link"
                                                     isInline
@@ -419,17 +440,11 @@ export const Application = () => {
                                 </CardTitle>
                                 <CardBody>
                                     <p className="bookmark-description">{service.description || service.resolvedUrl}</p>
-                                    <div className="bookmark-meta">
-                                        {service.group && <span className="bookmark-group">{service.group}</span>}
-                                        <a
-                                            className="bookmark-open"
-                                            href={service.resolvedUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            Open ↗
-                                        </a>
-                                    </div>
+                                    {service.group && (
+                                        <div className="bookmark-meta">
+                                            <span className="bookmark-group">{service.group}</span>
+                                        </div>
+                                    )}
                                 </CardBody>
                             </Card>
                         ))}
