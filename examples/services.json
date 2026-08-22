@@ -1,0 +1,27 @@
+{
+  "title": "Mini PC Services",
+  "subtitle": "Services hosted on this mini PC",
+  "services": [
+    {
+      "name": "Cockpit",
+      "description": "Server administration",
+      "url": "https://{host}:9090",
+      "icon": "🖥️",
+      "group": "System"
+    },
+    {
+      "name": "Grafana",
+      "description": "Metrics and dashboards",
+      "url": "http://{host}:3000",
+      "icon": "📊",
+      "group": "Monitoring"
+    },
+    {
+      "name": "Example service",
+      "description": "Replace this with one of your local web services",
+      "url": "http://{host}:8080",
+      "icon": "🔗",
+      "group": "Apps"
+    }
+  ]
+}
