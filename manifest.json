@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "requires": {
+    "cockpit": "239"
+  },
+  "tools": {
+    "local-services": {
+      "label": "Local Services",
+      "order": 55,
+      "path": "index.html",
+      "keywords": [
+        {
+          "matches": ["services", "bookmarks", "links", "apps"],
+          "translate": false
+        }
+      ]
+    }
+  }
+}
