@@ -3,6 +3,7 @@
   "subtitle": "Services hosted on this mini PC",
   "eyebrow": "Mini PC",
   "showEyebrow": true,
+  "displayMode": "cards",
   "services": [
     {
       "name": "Grafana",
