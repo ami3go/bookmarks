@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build release archive
+        run: make release
+
+      - name: Verify release files
+        run: |
+          version=$(node -p "require('./package.json').version")
+          root="cockpit-bookmarks-${version}"
+          archive="release/${root}.tar.gz"
+          test -s dist/index.html
+          test -s dist/index.css
+          test -s dist/index.js
+          test -s dist/manifest.json
+          test ! -e dist/index.js.map
+          test ! -e dist/index.css.map
+          test -s "$archive"
+          tar -tzf "$archive" | grep -Fx "$root/dist/index.html"
+          tar -tzf "$archive" | grep -Fx "$root/Makefile"
+          tar -tzf "$archive" | grep -Fx "$root/package.json"
+          tar -tzf "$archive" | grep -Fx "$root/LICENSE"
+
+      - name: Test prebuilt install without Node.js
+        run: |
+          version=$(node -p "require('./package.json').version")
+          root="cockpit-bookmarks-${version}"
+          archive="release/${root}.tar.gz"
+          workdir=$(mktemp -d)
+          tar -xzf "$archive" -C "$workdir"
+
+          env PATH=/usr/bin:/bin make -C "$workdir/$root" \
+            DESTDIR="$workdir/root" install-prebuilt install-config
+
+          plugin_dir="$workdir/root/usr/local/share/cockpit/cockpit-bookmarks"
+          config="$workdir/root/etc/cockpit/cockpit-bookmarks.json"
+          test -s "$plugin_dir/index.html"
+          test -s "$plugin_dir/index.css"
+          test -s "$plugin_dir/index.js"
+          test -s "$plugin_dir/manifest.json"
+          test -s "$config"
+
+          printf '%s\n' '{"title":"Preserve me","services":[]}' > "$config"
+          before=$(sha256sum "$config" | cut -d' ' -f1)
+
+          env PATH=/usr/bin:/bin make -C "$workdir/$root" \
+            DESTDIR="$workdir/root" uninstall
+          test ! -e "$plugin_dir"
+          test -s "$config"
+
+          env PATH=/usr/bin:/bin make -C "$workdir/$root" \
+            DESTDIR="$workdir/root" install-prebuilt install-config
+          test -s "$plugin_dir/index.html"
+          after=$(sha256sum "$config" | cut -d' ' -f1)
+          test "$before" = "$after"
+
+      - name: Upload production bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: cockpit-bookmarks-dist
+          path: dist/
+          if-no-files-found: error
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cockpit-bookmarks-release
+          path: release/cockpit-bookmarks-*.tar.gz
+          if-no-files-found: error

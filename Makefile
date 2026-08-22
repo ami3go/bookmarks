@@ -3,20 +3,30 @@ PREFIX ?= /usr/local
 CONFIG_DIR ?= /etc/cockpit
 CONFIG_FILE := $(CONFIG_DIR)/cockpit-bookmarks.json
 LEGACY_CONFIG_FILE := $(CONFIG_DIR)/local-services.json
+VERSION := $(shell sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)
+RELEASE_DIR := release
+RELEASE_NAME := $(PACKAGE_NAME)-$(VERSION)
+RELEASE_ARCHIVE := $(RELEASE_DIR)/$(RELEASE_NAME).tar.gz
 
-.PHONY: all dist watch install install-config devel-install devel-uninstall uninstall clean
+.PHONY: all dist watch install install-prebuilt install-config devel-install devel-uninstall uninstall clean release
 
 all: dist
 
-dist: package.json build.js $(wildcard src/*)
-	@test -d node_modules || npm install --ignore-scripts --no-audit --no-fund
+node_modules/.package-lock.json: package.json package-lock.json
+	npm ci --no-audit --no-fund
+
+dist: node_modules/.package-lock.json build.js $(wildcard src/*)
 	NODE_ENV=$(NODE_ENV) npm run build
 
-watch:
-	@test -d node_modules || npm install --ignore-scripts --no-audit --no-fund
+watch: node_modules/.package-lock.json
 	npm run watch
 
 install: dist
+	install -d "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
+	cp -r dist/* "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)/"
+
+install-prebuilt:
+	@test -s dist/index.html || { echo "Missing prebuilt dist/. Use 'make install' from a source checkout." >&2; exit 1; }
 	install -d "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
 	cp -r dist/* "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)/"
 
@@ -44,5 +54,15 @@ devel-uninstall:
 uninstall:
 	rm -rf "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
 
+release: clean
+	NODE_ENV=production $(MAKE) dist
+	rm -rf "$(RELEASE_DIR)/$(RELEASE_NAME)"
+	mkdir -p "$(RELEASE_DIR)/$(RELEASE_NAME)"
+	cp -r dist examples "$(RELEASE_DIR)/$(RELEASE_NAME)/"
+	cp Makefile package.json README.md ROADMAP.md CHANGELOG.md SECURITY.md LICENSE "$(RELEASE_DIR)/$(RELEASE_NAME)/"
+	tar -C "$(RELEASE_DIR)" -czf "$(RELEASE_ARCHIVE)" "$(RELEASE_NAME)"
+	rm -rf "$(RELEASE_DIR)/$(RELEASE_NAME)"
+	@echo "Created $(RELEASE_ARCHIVE)"
+
 clean:
-	rm -rf dist
+	rm -rf dist release

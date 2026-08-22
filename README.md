@@ -53,15 +53,19 @@ Administrators can manage bookmarks directly from Cockpit:
 - atomic JSON updates through Cockpit's `cockpit.file().modify()` API
 - existing configurations and bookmarks without IDs remain compatible
 
-## Build
+## Build from source
 
-Development packages are installed only for the build:
+Dependencies are locked in `package-lock.json` and installed reproducibly with npm:
 
 ```bash
-make
+npm ci
+npm test
+NODE_ENV=production make clean all
 ```
 
-`make` runs `npm install` the first time and produces:
+`make` also installs dependencies with `npm ci` automatically when `node_modules` is missing or the lockfile changes.
+
+The build produces:
 
 ```text
 dist/
@@ -69,18 +73,6 @@ dist/
 ├── index.css
 ├── index.js
 └── manifest.json
-```
-
-For a smaller production bundle:
-
-```bash
-NODE_ENV=production make clean all
-```
-
-Run the dependency-free helper tests with:
-
-```bash
-npm test
 ```
 
 ## Development install
@@ -105,7 +97,7 @@ Remove the development symlink with:
 make devel-uninstall
 ```
 
-## System install
+## System install from source
 
 Build and install the Cockpit package system-wide:
 
@@ -125,6 +117,47 @@ The configuration is stored at:
 ```text
 /etc/cockpit/cockpit-bookmarks.json
 ```
+
+## Install a prebuilt release
+
+Release archives contain the compiled `dist/` tree, so Node.js and npm are not required on the target server.
+
+After extracting `cockpit-bookmarks-<version>.tar.gz`:
+
+```bash
+cd cockpit-bookmarks-<version>
+sudo make install-prebuilt install-config
+```
+
+`install-prebuilt` refuses to continue if the compiled `dist/` tree is missing.
+
+## Create a release archive
+
+From a source checkout:
+
+```bash
+npm ci
+npm test
+make release
+```
+
+This produces:
+
+```text
+release/cockpit-bookmarks-<version>.tar.gz
+```
+
+The archive includes the compiled Cockpit package, example configuration, installer Makefile, README, roadmap, changelog, security policy, and license.
+
+## Continuous integration
+
+GitHub Actions runs on pull requests and pushes to `main`. CI performs:
+
+1. `npm ci`
+2. unit tests
+3. production release build
+4. release-file and tarball-content validation
+5. upload of the compiled `dist/` tree and release tarball as workflow artifacts
 
 ## Edit mode
 
@@ -199,6 +232,8 @@ Group section order follows the first occurrence of each group in the configurat
 
 ```text
 cockpit-bookmarks/
+├── .github/workflows/
+│   └── ci.yml
 ├── src/
 │   ├── app.jsx
 │   ├── app.css
@@ -213,7 +248,11 @@ cockpit-bookmarks/
 ├── build.js
 ├── Makefile
 ├── package.json
+├── package-lock.json
+├── CHANGELOG.md
+├── SECURITY.md
 ├── ROADMAP.md
+├── LICENSE
 └── README.md
 ```
 
@@ -226,6 +265,14 @@ Node.js, npm, React source files, tests, and `node_modules/` are not required by
 A bookmark cannot make a service listening only on `127.0.0.1` reachable from another computer. Such a service must listen on an appropriate LAN interface or be exposed through a reverse proxy.
 
 Service health checks are intentionally not part of the current release. Generic browser-side probes are unreliable across CORS policies, authentication, mixed-content rules, and self-signed TLS certificates.
+
+## Security
+
+See `SECURITY.md` for supported versions, vulnerability reporting, and the extension's security model.
+
+## Changelog
+
+See `CHANGELOG.md` for release notes.
 
 ## License
 
