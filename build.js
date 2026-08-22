@@ -2,7 +2,9 @@
 
 import fs from 'node:fs/promises';
 import process from 'node:process';
-import { context } from 'esbuild';
+
+const esbuildModule = await import('esbuild');
+const esbuild = esbuildModule.default ?? esbuildModule;
 
 const watch = process.argv.includes('--watch');
 const production = process.env.NODE_ENV === 'production';
@@ -27,7 +29,7 @@ const html = `<!doctype html>
 await fs.rm('dist', { recursive: true, force: true });
 await fs.mkdir('dist', { recursive: true });
 
-const buildContext = await context({
+const buildContext = await esbuild.context({
     entryPoints: ['src/index.jsx'],
     bundle: true,
     outdir: 'dist',
@@ -35,6 +37,17 @@ const buildContext = await context({
     minify: production,
     sourcemap: production ? false : 'linked',
     legalComments: 'external',
+    assetNames: 'assets/[name]-[hash]',
+    loader: {
+        '.eot': 'file',
+        '.gif': 'file',
+        '.jpg': 'file',
+        '.png': 'file',
+        '.svg': 'file',
+        '.ttf': 'file',
+        '.woff': 'file',
+        '.woff2': 'file'
+    },
 });
 
 async function writeStaticFiles() {
