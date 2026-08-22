@@ -24,6 +24,7 @@ The project follows semantic versioning where practical.
 ### Changed
 
 - Bookmark cards are the service link and open in a new browser tab.
+- Card management actions are compacted into a three-dot menu that appears only in edit mode; Edit, Move up, Move down, and Delete live inside the menu.
 - Edit and Delete actions are protected by the pencil edit-mode toggle.
 - Configuration logic is separated into `src/bookmarks.js` for easier testing and maintenance.
 - Build dependencies are locked with `package-lock.json` and installed reproducibly with `npm ci`.
