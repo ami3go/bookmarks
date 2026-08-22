@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 import { Card, CardBody, CardTitle } from '@patternfly/react-core/dist/esm/components/Card/index.js';
@@ -9,139 +9,55 @@ import { SearchInput } from '@patternfly/react-core/dist/esm/components/SearchIn
 import { TextArea } from '@patternfly/react-core/dist/esm/components/TextArea/index.js';
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput/index.js';
 
-const CONFIG_PATH = '/etc/cockpit/cockpit-bookmarks.json';
-const DEFAULT_CONFIG = {
-    title: 'Cockpit Bookmarks',
-    subtitle: 'Services hosted on this mini PC',
-    services: [],
-};
-const EMPTY_BOOKMARK = {
-    name: '',
-    url: '',
-    description: '',
-    group: '',
-    icon: '',
-};
-const CONFIG_SYNTAX = {
-    parse: JSON.parse,
-    stringify: value => `${JSON.stringify(value, null, 2)}\n`,
-};
+import {
+    CONFIG_PATH,
+    CONFIG_SYNTAX,
+    DEFAULT_CONFIG,
+    EDIT_MODE_TIMEOUT_MS,
+    EMPTY_BOOKMARK,
+    ICON_PRESETS,
+    MAX_CONFIG_SIZE,
+    allowedUrl,
+    duplicateWarnings,
+    editableBookmark,
+    expandUrl,
+    findBookmarkIndex,
+    groupNames,
+    moveService,
+    normalizeConfig,
+    normalizeImportedConfig,
+    restoreHistoryEntry,
+    serviceGroup,
+    storedBookmark,
+    validateBookmark,
+    withHistory,
+} from './bookmarks.js';
 
 function PencilIcon() {
     return (
-        <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            focusable="false"
-            fill="currentColor"
-        >
+        <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false" fill="currentColor">
             <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-10.04a.996.996 0 0 0 0-1.41l-2.5-2.5a.996.996 0 0 0-1.41 0l-1.96 1.96 3.75 3.75 2.12-1.8Z" />
         </svg>
     );
 }
 
-function miniPcHost() {
-    const hostname = window.location.hostname;
-    return hostname.includes(':') && !hostname.startsWith('[') ? `[${hostname}]` : hostname;
+function runtimeFreeService(service) {
+    const { sourceIndex, resolvedUrl, ...storedService } = service;
+    return storedService;
 }
 
-function expandUrl(url) {
-    return String(url || '').replaceAll('{host}', miniPcHost());
-}
-
-function allowedUrl(url) {
+function formatHistoryDate(value) {
     try {
-        const parsed = new URL(url, window.location.href);
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        return new Date(value).toLocaleString();
     } catch (_) {
-        return false;
+        return String(value || 'Unknown time');
     }
-}
-
-function normalizeConfig(config) {
-    if (!config || typeof config !== 'object' || !Array.isArray(config.services))
-        throw new Error('Configuration must contain a services array.');
-
-    return {
-        ...config,
-        title: config.title || DEFAULT_CONFIG.title,
-        subtitle: config.subtitle || DEFAULT_CONFIG.subtitle,
-        services: config.services,
-    };
-}
-
-function newBookmarkId() {
-    if (window.crypto?.randomUUID)
-        return window.crypto.randomUUID();
-
-    return `bookmark-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function editableBookmark(service = EMPTY_BOOKMARK) {
-    return {
-        name: String(service.name || ''),
-        url: String(service.url || ''),
-        description: String(service.description || ''),
-        group: String(service.group || ''),
-        icon: String(service.icon || ''),
-    };
-}
-
-function storedBookmark(draft, original = {}) {
-    const bookmark = {
-        ...original,
-        id: original.id || newBookmarkId(),
-        name: draft.name.trim(),
-        url: draft.url.trim(),
-    };
-
-    for (const field of ['description', 'group', 'icon']) {
-        const value = draft[field].trim();
-        if (value)
-            bookmark[field] = value;
-        else
-            delete bookmark[field];
-    }
-
-    return bookmark;
-}
-
-function sameLegacyBookmark(left, right) {
-    return ['name', 'url', 'description', 'group', 'icon'].every(field =>
-        String(left?.[field] || '') === String(right?.[field] || ''));
-}
-
-function findBookmarkIndex(services, target) {
-    if (target.service.id) {
-        const byId = services.findIndex(service => service.id === target.service.id);
-        if (byId !== -1)
-            return byId;
-    }
-
-    if (target.index >= 0 && target.index < services.length &&
-        sameLegacyBookmark(services[target.index], target.service))
-        return target.index;
-
-    return services.findIndex(service => sameLegacyBookmark(service, target.service));
-}
-
-function validateBookmark(draft) {
-    const errors = {};
-
-    if (!draft.name.trim())
-        errors.name = 'Name is required.';
-
-    if (!draft.url.trim())
-        errors.url = 'URL is required.';
-    else if (!allowedUrl(expandUrl(draft.url.trim())))
-        errors.url = 'Use an http:// or https:// URL. The {host} placeholder is supported.';
-
-    return errors;
 }
 
 export const Application = () => {
     const [config, setConfig] = useState(DEFAULT_CONFIG);
     const [query, setQuery] = useState('');
+    const [groupFilter, setGroupFilter] = useState('all');
     const [notice, setNotice] = useState(null);
     const [canEdit, setCanEdit] = useState(null);
     const [editMode, setEditMode] = useState(false);
@@ -150,9 +66,23 @@ export const Application = () => {
     const [formErrors, setFormErrors] = useState({});
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [settingsDraft, setSettingsDraft] = useState({
+        title: DEFAULT_CONFIG.title,
+        subtitle: DEFAULT_CONFIG.subtitle,
+        eyebrow: DEFAULT_CONFIG.eyebrow,
+        showEyebrow: true,
+    });
+    const [settingsError, setSettingsError] = useState('');
+    const [importCandidate, setImportCandidate] = useState(null);
+    const [historyOpen, setHistoryOpen] = useState(false);
+    const [dragSource, setDragSource] = useState(null);
+    const fileInputRef = useRef(null);
+
+    const hostname = window.location.hostname;
 
     useEffect(() => {
-        const file = window.cockpit.file(CONFIG_PATH, { syntax: CONFIG_SYNTAX, max_read_size: 262144 });
+        const file = window.cockpit.file(CONFIG_PATH, { syntax: CONFIG_SYNTAX, max_read_size: MAX_CONFIG_SIZE });
         let active = true;
 
         file.read()
@@ -163,7 +93,7 @@ export const Application = () => {
                 if (content === null) {
                     setNotice({
                         variant: 'info',
-                        text: `No configuration found. Add a bookmark to create ${CONFIG_PATH}.`,
+                        text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
                     });
                     return;
                 }
@@ -202,23 +132,75 @@ export const Application = () => {
         };
     }, []);
 
+    useEffect(() => {
+        if (!editMode || editor || deleteTarget || settingsOpen || importCandidate || historyOpen)
+            return undefined;
+
+        let timer;
+        const resetTimer = () => {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(() => setEditMode(false), EDIT_MODE_TIMEOUT_MS);
+        };
+
+        resetTimer();
+        window.addEventListener('pointerdown', resetTimer);
+        window.addEventListener('keydown', resetTimer);
+
+        return () => {
+            window.clearTimeout(timer);
+            window.removeEventListener('pointerdown', resetTimer);
+            window.removeEventListener('keydown', resetTimer);
+        };
+    }, [editMode, editor, deleteTarget, settingsOpen, importCandidate, historyOpen]);
+
+    const groups = useMemo(() => groupNames(config.services), [config.services]);
+
+    useEffect(() => {
+        if (groupFilter !== 'all' && !groups.includes(groupFilter))
+            setGroupFilter('all');
+    }, [groupFilter, groups]);
+
     const services = useMemo(() => {
         const needle = query.trim().toLowerCase();
         return config.services
-            .map((service, index) => ({ ...service, sourceIndex: index, resolvedUrl: expandUrl(service.url) }))
+            .map((service, index) => ({
+                ...service,
+                sourceIndex: index,
+                resolvedUrl: expandUrl(service.url, hostname),
+            }))
             .filter(service => allowedUrl(service.resolvedUrl))
+            .filter(service => groupFilter === 'all' || serviceGroup(service) === groupFilter)
             .filter(service => {
                 if (!needle)
                     return true;
-                const haystack = `${service.name || ''} ${service.description || ''} ${service.group || ''} ${service.url || ''}`.toLowerCase();
+                const tags = Array.isArray(service.tags) ? service.tags.join(' ') : String(service.tags || '');
+                const haystack = `${service.name || ''} ${service.description || ''} ${service.group || ''} ${service.url || ''} ${tags}`.toLowerCase();
                 return haystack.includes(needle);
             });
-    }, [config.services, query]);
+    }, [config.services, query, groupFilter, hostname]);
 
-    const modifyConfig = (transform, successText, onSuccess) => {
+    const groupedServices = useMemo(() => {
+        const result = new Map();
+        for (const service of services) {
+            const group = serviceGroup(service);
+            if (!result.has(group))
+                result.set(group, []);
+            result.get(group).push(service);
+        }
+        return [...result.entries()];
+    }, [services]);
+
+    const currentTarget = editor?.mode === 'edit' ? editor.target : null;
+    const warnings = useMemo(
+        () => duplicateWarnings(draft, config.services, currentTarget, hostname),
+        [draft, config.services, currentTarget, hostname]
+    );
+    const resolvedPreview = draft.url.trim() ? expandUrl(draft.url.trim(), hostname) : '';
+
+    const modifyConfig = (transform, successText, onSuccess, action = successText) => {
         const file = window.cockpit.file(CONFIG_PATH, {
             syntax: CONFIG_SYNTAX,
-            max_read_size: 262144,
+            max_read_size: MAX_CONFIG_SIZE,
             superuser: 'require',
         });
 
@@ -227,9 +209,10 @@ export const Application = () => {
 
         file.modify(oldContent => {
             const current = oldContent === null
-                ? { ...DEFAULT_CONFIG, services: [] }
+                ? { ...DEFAULT_CONFIG, services: [], history: [] }
                 : normalizeConfig(oldContent);
-            return transform(current);
+            const next = transform(current);
+            return withHistory(current, next, action);
         })
             .then(newContent => {
                 file.close();
@@ -249,6 +232,8 @@ export const Application = () => {
     };
 
     const openAdd = () => {
+        if (canEdit !== true)
+            return;
         setDraft({ ...EMPTY_BOOKMARK });
         setFormErrors({});
         setEditor({ mode: 'add' });
@@ -258,12 +243,12 @@ export const Application = () => {
         if (!editMode || canEdit !== true)
             return;
 
-        const { sourceIndex, resolvedUrl, ...storedService } = service;
+        const storedService = runtimeFreeService(service);
         setDraft(editableBookmark(storedService));
         setFormErrors({});
         setEditor({
             mode: 'edit',
-            target: { index: sourceIndex, service: storedService },
+            target: { index: service.sourceIndex, service: storedService },
         });
     };
 
@@ -281,7 +266,7 @@ export const Application = () => {
 
     const submitEditor = event => {
         event.preventDefault();
-        const errors = validateBookmark(draft);
+        const errors = validateBookmark(draft, hostname);
         setFormErrors(errors);
         if (Object.keys(errors).length > 0)
             return;
@@ -290,27 +275,29 @@ export const Application = () => {
             modifyConfig(current => ({
                 ...current,
                 services: [...current.services, storedBookmark(draft)],
-            }), 'Bookmark added.', () => setEditor(null));
+            }), 'Bookmark added.', () => setEditor(null), `Added ${draft.name.trim()}`);
             return;
         }
+
+        if (!editMode)
+            return;
 
         modifyConfig(current => {
             const index = findBookmarkIndex(current.services, editor.target);
             if (index === -1)
                 throw new Error('This bookmark was changed or removed. Reload the page and try again.');
 
-            const services = [...current.services];
-            services[index] = storedBookmark(draft, services[index]);
-            return { ...current, services };
-        }, 'Bookmark updated.', () => setEditor(null));
+            const updatedServices = [...current.services];
+            updatedServices[index] = storedBookmark(draft, updatedServices[index]);
+            return { ...current, services: updatedServices };
+        }, 'Bookmark updated.', () => setEditor(null), `Edited ${draft.name.trim()}`);
     };
 
     const requestDelete = service => {
         if (!editMode || canEdit !== true)
             return;
 
-        const { sourceIndex, resolvedUrl, ...storedService } = service;
-        setDeleteTarget({ index: sourceIndex, service: storedService });
+        setDeleteTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
     };
 
     const deleteBookmark = () => {
@@ -323,21 +310,149 @@ export const Application = () => {
                 ...current,
                 services: current.services.filter((_, serviceIndex) => serviceIndex !== index),
             };
-        }, 'Bookmark deleted.', () => setDeleteTarget(null));
+        }, 'Bookmark deleted.', () => setDeleteTarget(null), `Deleted ${deleteTarget?.service?.name || 'bookmark'}`);
     };
 
     const openService = service => {
         window.open(service.resolvedUrl, '_blank', 'noopener,noreferrer');
     };
 
+    const reorderBetween = (source, target) => {
+        if (!editMode || !source || !target || source.sourceIndex === target.sourceIndex)
+            return;
+        if (serviceGroup(source) !== serviceGroup(target)) {
+            setNotice({ variant: 'warning', text: 'Drag-and-drop reordering is limited to bookmarks in the same group.' });
+            return;
+        }
+
+        const sourceStored = runtimeFreeService(source);
+        const targetStored = runtimeFreeService(target);
+        modifyConfig(current => {
+            const fromIndex = findBookmarkIndex(current.services, { index: source.sourceIndex, service: sourceStored });
+            const toIndex = findBookmarkIndex(current.services, { index: target.sourceIndex, service: targetStored });
+            if (fromIndex === -1 || toIndex === -1)
+                throw new Error('A bookmark changed while reordering. Reload and try again.');
+            return { ...current, services: moveService(current.services, fromIndex, toIndex) };
+        }, 'Bookmark order updated.', undefined, 'Reordered bookmarks');
+    };
+
+    const moveWithinGroup = (service, direction) => {
+        const siblingIndexes = config.services
+            .map((item, index) => ({ item, index }))
+            .filter(({ item }) => serviceGroup(item) === serviceGroup(service))
+            .map(({ index }) => index);
+        const position = siblingIndexes.indexOf(service.sourceIndex);
+        const targetPosition = position + direction;
+        if (position === -1 || targetPosition < 0 || targetPosition >= siblingIndexes.length)
+            return;
+
+        const targetIndex = siblingIndexes[targetPosition];
+        reorderBetween(service, {
+            ...config.services[targetIndex],
+            sourceIndex: targetIndex,
+            resolvedUrl: expandUrl(config.services[targetIndex].url, hostname),
+        });
+    };
+
+    const toggleEditMode = () => {
+        if (canEdit !== true || saving)
+            return;
+        setEditMode(current => !current);
+    };
+
+    const openSettings = () => {
+        if (!editMode)
+            return;
+        setSettingsDraft({
+            title: config.title,
+            subtitle: config.subtitle,
+            eyebrow: config.eyebrow,
+            showEyebrow: config.showEyebrow,
+        });
+        setSettingsError('');
+        setSettingsOpen(true);
+    };
+
+    const submitSettings = event => {
+        event.preventDefault();
+        if (!settingsDraft.title.trim()) {
+            setSettingsError('Title is required.');
+            return;
+        }
+
+        modifyConfig(current => ({
+            ...current,
+            title: settingsDraft.title.trim(),
+            subtitle: settingsDraft.subtitle.trim(),
+            eyebrow: settingsDraft.eyebrow.trim(),
+            showEyebrow: settingsDraft.showEyebrow,
+        }), 'Page settings updated.', () => setSettingsOpen(false), 'Updated page settings');
+    };
+
+    const exportConfig = () => {
+        const blob = new Blob([CONFIG_SYNTAX.stringify(config)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `cockpit-bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportFile = async event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file)
+            return;
+
+        if (file.size > MAX_CONFIG_SIZE) {
+            setNotice({ variant: 'danger', text: 'Import file is too large.' });
+            return;
+        }
+
+        try {
+            const parsed = JSON.parse(await file.text());
+            setImportCandidate(normalizeImportedConfig(parsed, hostname));
+        } catch (error) {
+            setNotice({ variant: 'danger', text: `Could not import JSON: ${error.message}` });
+        }
+    };
+
+    const confirmImport = () => {
+        if (!importCandidate || !editMode)
+            return;
+
+        modifyConfig(current => ({
+            ...importCandidate,
+            history: current.history,
+        }), `Imported ${importCandidate.services.length} bookmarks.`, () => {
+            setImportCandidate(null);
+            setQuery('');
+            setGroupFilter('all');
+        }, 'Imported configuration');
+    };
+
+    const restoreHistory = entry => {
+        if (!editMode)
+            return;
+        modifyConfig(current => restoreHistoryEntry(current, entry), 'Configuration restored.', () => setHistoryOpen(false), 'Restored history snapshot');
+    };
+
+    const clearFilters = () => {
+        setQuery('');
+        setGroupFilter('all');
+    };
+
     return (
         <Page className="pf-m-no-sidebar">
             <main className="bookmarks-page">
                 <header className="bookmarks-header">
-                    <div>
-                        <p className="bookmarks-eyebrow">Mini PC</p>
+                    <div className="bookmarks-heading">
+                        {config.showEyebrow && config.eyebrow && <p className="bookmarks-eyebrow">{config.eyebrow}</p>}
                         <h1>{config.title}</h1>
-                        <p className="bookmarks-subtitle">{config.subtitle}</p>
+                        {config.subtitle && <p className="bookmarks-subtitle">{config.subtitle}</p>}
                     </div>
                     <div className="bookmarks-header-actions">
                         <SearchInput
@@ -347,17 +462,20 @@ export const Application = () => {
                             onChange={(_event, value) => setQuery(value)}
                             onClear={() => setQuery('')}
                         />
-                        <Button
-                            variant="primary"
-                            onClick={openAdd}
-                            isDisabled={canEdit !== true}
-                        >
+                        <label className="bookmarks-group-filter">
+                            <span className="sr-only">Filter by group</span>
+                            <select value={groupFilter} onChange={event => setGroupFilter(event.target.value)}>
+                                <option value="all">All groups</option>
+                                {groups.map(group => <option value={group} key={group}>{group}</option>)}
+                            </select>
+                        </label>
+                        <Button variant="primary" onClick={openAdd} isDisabled={canEdit !== true}>
                             Add bookmark
                         </Button>
                         <Button
                             variant={editMode ? 'secondary' : 'plain'}
                             className="bookmark-edit-mode-toggle"
-                            onClick={() => setEditMode(current => !current)}
+                            onClick={toggleEditMode}
                             isDisabled={canEdit !== true}
                             aria-label={editMode ? 'Disable edit mode' : 'Enable edit mode'}
                             aria-pressed={editMode}
@@ -369,92 +487,180 @@ export const Application = () => {
                 </header>
 
                 {canEdit === false && (
-                    <Alert
-                        isInline
-                        variant="info"
-                        title="Read-only mode"
-                        className="bookmarks-notice"
-                    >
-                        Administrator privileges are required to add, edit, or delete bookmarks.
+                    <Alert isInline variant="info" title="Read-only mode" className="bookmarks-notice">
+                        Administrator privileges are required to add, edit, delete, reorder, or import bookmarks.
                     </Alert>
                 )}
 
-                {notice && (
-                    <Alert
-                        isInline
-                        variant={notice.variant}
-                        title={notice.text}
-                        className="bookmarks-notice"
-                    />
+                {editMode && canEdit === true && (
+                    <div className="bookmarks-management-bar">
+                        <div>
+                            <strong>Edit mode enabled.</strong>
+                            <span> It locks automatically after 2 minutes of inactivity.</span>
+                        </div>
+                        <div className="bookmarks-management-actions">
+                            <Button variant="secondary" onClick={openSettings}>Page settings</Button>
+                            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Import JSON</Button>
+                            <Button variant="secondary" onClick={exportConfig}>Export JSON</Button>
+                            <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
+                                History ({config.history.length})
+                            </Button>
+                        </div>
+                    </div>
                 )}
 
-                {services.length > 0 ? (
-                    <section className="bookmarks-grid" aria-label="Service bookmarks">
-                        {services.map(service => (
-                            <Card
-                                className="bookmark-card"
-                                key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
-                                role="link"
-                                tabIndex={0}
-                                aria-label={`Open ${service.name || 'service'} in a new tab`}
-                                onClick={() => openService(service)}
-                                onKeyDown={event => {
-                                    if (event.key === 'Enter') {
-                                        event.preventDefault();
-                                        openService(service);
-                                    }
-                                }}
-                            >
-                                <CardTitle>
-                                    <div className="bookmark-title-row">
-                                        <div className="bookmark-title-main">
-                                            <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
-                                            <span>{service.name || 'Unnamed service'}</span>
-                                        </div>
-                                        {canEdit === true && (
-                                            <div
-                                                className="bookmark-card-actions"
-                                                onClick={event => event.stopPropagation()}
-                                                onKeyDown={event => event.stopPropagation()}
-                                            >
-                                                <Button
-                                                    variant="link"
-                                                    isInline
-                                                    isDisabled={!editMode || saving}
-                                                    onClick={() => openEdit(service)}
-                                                >
-                                                    Edit
-                                                </Button>
-                                                <Button
-                                                    variant="link"
-                                                    isDanger
-                                                    isInline
-                                                    isDisabled={!editMode || saving}
-                                                    onClick={() => requestDelete(service)}
-                                                >
-                                                    Delete
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardTitle>
-                                <CardBody>
-                                    <p className="bookmark-description">{service.description || service.resolvedUrl}</p>
-                                    {service.group && (
-                                        <div className="bookmark-meta">
-                                            <span className="bookmark-group">{service.group}</span>
-                                        </div>
-                                    )}
-                                </CardBody>
-                            </Card>
-                        ))}
-                    </section>
-                ) : (
+                <input
+                    ref={fileInputRef}
+                    className="bookmarks-file-input"
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={handleImportFile}
+                />
+
+                {notice && (
+                    <Alert isInline variant={notice.variant} title={notice.text} className="bookmarks-notice" />
+                )}
+
+                {config.services.length === 0 ? (
+                    <div className="bookmarks-empty bookmarks-empty-first-run">
+                        <h2>Add your first service</h2>
+                        <p>
+                            Bookmarks are stored in <code>{CONFIG_PATH}</code>. Use <code>{'{host}'}</code> in a URL to reuse
+                            the hostname or IP address that opened Cockpit.
+                        </p>
+                        {canEdit === true && <Button variant="primary" onClick={openAdd}>Add your first bookmark</Button>}
+                    </div>
+                ) : services.length === 0 ? (
                     <div className="bookmarks-empty">
-                        <p>No matching services.</p>
-                        {canEdit === true && !query && (
-                            <Button variant="primary" onClick={openAdd}>Add your first bookmark</Button>
-                        )}
+                        <h2>No matching bookmarks</h2>
+                        <p>Change the search text or group filter to show more services.</p>
+                        <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>
+                    </div>
+                ) : (
+                    <div className="bookmark-groups">
+                        {groupedServices.map(([group, groupServices]) => (
+                            <section className="bookmark-group-section" key={group} aria-labelledby={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+                                <div className="bookmark-group-heading">
+                                    <h2 id={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>{group}</h2>
+                                    <span>{groupServices.length}</span>
+                                </div>
+                                <div className="bookmarks-grid">
+                                    {groupServices.map(service => {
+                                        const siblingIndexes = config.services
+                                            .map((item, index) => ({ item, index }))
+                                            .filter(({ item }) => serviceGroup(item) === serviceGroup(service))
+                                            .map(({ index }) => index);
+                                        const groupPosition = siblingIndexes.indexOf(service.sourceIndex);
+                                        const canMoveUp = groupPosition > 0;
+                                        const canMoveDown = groupPosition >= 0 && groupPosition < siblingIndexes.length - 1;
+
+                                        return (
+                                            <Card
+                                                className={`bookmark-card${dragSource?.sourceIndex === service.sourceIndex ? ' is-dragging' : ''}`}
+                                                key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
+                                                role="link"
+                                                tabIndex={0}
+                                                aria-label={`Open ${service.name || 'service'} in a new tab`}
+                                                onClick={() => openService(service)}
+                                                onKeyDown={event => {
+                                                    if (event.key === 'Enter') {
+                                                        event.preventDefault();
+                                                        openService(service);
+                                                    }
+                                                }}
+                                                onDragOver={event => {
+                                                    if (editMode && dragSource && serviceGroup(dragSource) === serviceGroup(service))
+                                                        event.preventDefault();
+                                                }}
+                                                onDrop={event => {
+                                                    event.preventDefault();
+                                                    reorderBetween(dragSource, service);
+                                                    setDragSource(null);
+                                                }}
+                                            >
+                                                <CardTitle>
+                                                    <div className="bookmark-title-row">
+                                                        <div className="bookmark-title-main">
+                                                            <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
+                                                            <span>{service.name || 'Unnamed service'}</span>
+                                                        </div>
+                                                        {canEdit === true && (
+                                                            <div
+                                                                className="bookmark-card-actions"
+                                                                onClick={event => event.stopPropagation()}
+                                                                onKeyDown={event => event.stopPropagation()}
+                                                            >
+                                                                {editMode && (
+                                                                    <>
+                                                                        <span
+                                                                            className="bookmark-drag-handle"
+                                                                            draggable
+                                                                            aria-hidden="true"
+                                                                            title="Drag to reorder"
+                                                                            onDragStart={event => {
+                                                                                setDragSource(service);
+                                                                                event.dataTransfer.effectAllowed = 'move';
+                                                                                event.dataTransfer.setData('text/plain', service.id || String(service.sourceIndex));
+                                                                            }}
+                                                                            onDragEnd={() => setDragSource(null)}
+                                                                        >
+                                                                            ⋮⋮
+                                                                        </span>
+                                                                        <Button
+                                                                            variant="plain"
+                                                                            aria-label={`Move ${service.name} up`}
+                                                                            title="Move up"
+                                                                            isDisabled={!canMoveUp || saving}
+                                                                            onClick={() => moveWithinGroup(service, -1)}
+                                                                        >
+                                                                            ↑
+                                                                        </Button>
+                                                                        <Button
+                                                                            variant="plain"
+                                                                            aria-label={`Move ${service.name} down`}
+                                                                            title="Move down"
+                                                                            isDisabled={!canMoveDown || saving}
+                                                                            onClick={() => moveWithinGroup(service, 1)}
+                                                                        >
+                                                                            ↓
+                                                                        </Button>
+                                                                    </>
+                                                                )}
+                                                                <Button
+                                                                    variant="link"
+                                                                    isInline
+                                                                    isDisabled={!editMode || saving}
+                                                                    onClick={() => openEdit(service)}
+                                                                >
+                                                                    Edit
+                                                                </Button>
+                                                                <Button
+                                                                    variant="link"
+                                                                    isDanger
+                                                                    isInline
+                                                                    isDisabled={!editMode || saving}
+                                                                    onClick={() => requestDelete(service)}
+                                                                >
+                                                                    Delete
+                                                                </Button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </CardTitle>
+                                                <CardBody>
+                                                    <p className="bookmark-description">{service.description || service.resolvedUrl}</p>
+                                                    <div className="bookmark-meta">
+                                                        {Array.isArray(service.tags) && service.tags.map(tag => (
+                                                            <span className="bookmark-tag" key={tag}>{tag}</span>
+                                                        ))}
+                                                    </div>
+                                                </CardBody>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            </section>
+                        ))}
                     </div>
                 )}
 
@@ -463,14 +669,15 @@ export const Application = () => {
                 </footer>
             </main>
 
-            <Modal
-                isOpen={editor !== null}
-                onClose={closeEditor}
-                variant="medium"
-            >
+            <Modal isOpen={editor !== null} onClose={closeEditor} variant="medium">
                 <ModalHeader title={editor?.mode === 'edit' ? 'Edit bookmark' : 'Add bookmark'} />
                 <ModalBody>
                     <Form id="bookmark-editor-form" onSubmit={submitEditor}>
+                        {warnings.length > 0 && (
+                            <Alert isInline variant="warning" title="Possible duplicate">
+                                {warnings.join(' ')}
+                            </Alert>
+                        )}
                         <FormGroup label="Name" isRequired fieldId="bookmark-name">
                             <TextInput
                                 id="bookmark-name"
@@ -491,7 +698,14 @@ export const Application = () => {
                                 validated={formErrors.url ? 'error' : 'default'}
                             />
                             {formErrors.url && <div className="bookmark-field-error">{formErrors.url}</div>}
-                            {!formErrors.url && <div className="bookmark-field-help">Use {'{host}'} for the Cockpit host name or IP address.</div>}
+                            {!formErrors.url && (
+                                <div className="bookmark-field-help">
+                                    Use <code>{'{host}'}</code> for the Cockpit host name or IP address.
+                                    {resolvedPreview && allowedUrl(resolvedPreview) && (
+                                        <div>Resolved URL: <code>{resolvedPreview}</code></div>
+                                    )}
+                                </div>
+                            )}
                         </FormGroup>
                         <FormGroup label="Description" fieldId="bookmark-description">
                             <TextArea
@@ -507,7 +721,11 @@ export const Application = () => {
                                 value={draft.group}
                                 onChange={(_event, value) => updateDraft('group', value)}
                                 placeholder="Monitoring"
+                                list="bookmark-group-options"
                             />
+                            <datalist id="bookmark-group-options">
+                                {groups.filter(group => group !== 'Ungrouped').map(group => <option value={group} key={group} />)}
+                            </datalist>
                         </FormGroup>
                         <FormGroup label="Icon" fieldId="bookmark-icon">
                             <TextInput
@@ -516,27 +734,40 @@ export const Application = () => {
                                 onChange={(_event, value) => updateDraft('icon', value)}
                                 placeholder="📊"
                             />
+                            <div className="bookmark-icon-presets" aria-label="Common icons">
+                                {ICON_PRESETS.map(icon => (
+                                    <button
+                                        type="button"
+                                        className={draft.icon === icon ? 'is-selected' : ''}
+                                        onClick={() => updateDraft('icon', icon)}
+                                        aria-label={`Use ${icon} icon`}
+                                        key={icon}
+                                    >
+                                        {icon}
+                                    </button>
+                                ))}
+                            </div>
+                        </FormGroup>
+                        <FormGroup label="Tags" fieldId="bookmark-tags">
+                            <TextInput
+                                id="bookmark-tags"
+                                value={draft.tags}
+                                onChange={(_event, value) => updateDraft('tags', value)}
+                                placeholder="dashboard, monitoring"
+                            />
+                            <div className="bookmark-field-help">Separate tags with commas. Tags are searchable.</div>
                         </FormGroup>
                     </Form>
                 </ModalBody>
                 <ModalFooter>
-                    <Button
-                        variant="primary"
-                        type="submit"
-                        form="bookmark-editor-form"
-                        isDisabled={saving}
-                    >
+                    <Button variant="primary" type="submit" form="bookmark-editor-form" isDisabled={saving}>
                         {saving ? 'Saving…' : (editor?.mode === 'edit' ? 'Save changes' : 'Add bookmark')}
                     </Button>
                     <Button variant="link" onClick={closeEditor} isDisabled={saving}>Cancel</Button>
                 </ModalFooter>
             </Modal>
 
-            <Modal
-                isOpen={deleteTarget !== null}
-                onClose={() => !saving && setDeleteTarget(null)}
-                variant="small"
-            >
+            <Modal isOpen={deleteTarget !== null} onClose={() => !saving && setDeleteTarget(null)} variant="small">
                 <ModalHeader title="Delete bookmark?" titleIconVariant="danger" />
                 <ModalBody>
                     {deleteTarget && (
@@ -550,6 +781,106 @@ export const Application = () => {
                         {saving ? 'Deleting…' : 'Delete'}
                     </Button>
                     <Button variant="link" onClick={() => setDeleteTarget(null)} isDisabled={saving}>Cancel</Button>
+                </ModalFooter>
+            </Modal>
+
+            <Modal isOpen={settingsOpen} onClose={() => !saving && setSettingsOpen(false)} variant="medium">
+                <ModalHeader title="Page settings" />
+                <ModalBody>
+                    <Form id="bookmark-settings-form" onSubmit={submitSettings}>
+                        <FormGroup label="Title" isRequired fieldId="settings-title">
+                            <TextInput
+                                id="settings-title"
+                                value={settingsDraft.title}
+                                onChange={(_event, value) => {
+                                    setSettingsDraft(current => ({ ...current, title: value }));
+                                    setSettingsError('');
+                                }}
+                                validated={settingsError ? 'error' : 'default'}
+                            />
+                            {settingsError && <div className="bookmark-field-error">{settingsError}</div>}
+                        </FormGroup>
+                        <FormGroup label="Subtitle" fieldId="settings-subtitle">
+                            <TextInput
+                                id="settings-subtitle"
+                                value={settingsDraft.subtitle}
+                                onChange={(_event, value) => setSettingsDraft(current => ({ ...current, subtitle: value }))}
+                            />
+                        </FormGroup>
+                        <FormGroup label="Eyebrow" fieldId="settings-eyebrow">
+                            <TextInput
+                                id="settings-eyebrow"
+                                value={settingsDraft.eyebrow}
+                                onChange={(_event, value) => setSettingsDraft(current => ({ ...current, eyebrow: value }))}
+                                isDisabled={!settingsDraft.showEyebrow}
+                            />
+                        </FormGroup>
+                        <label className="bookmarks-checkbox">
+                            <input
+                                type="checkbox"
+                                checked={settingsDraft.showEyebrow}
+                                onChange={event => setSettingsDraft(current => ({ ...current, showEyebrow: event.target.checked }))}
+                            />
+                            <span>Show eyebrow above the page title</span>
+                        </label>
+                    </Form>
+                </ModalBody>
+                <ModalFooter>
+                    <Button variant="primary" type="submit" form="bookmark-settings-form" isDisabled={saving}>
+                        {saving ? 'Saving…' : 'Save settings'}
+                    </Button>
+                    <Button variant="link" onClick={() => setSettingsOpen(false)} isDisabled={saving}>Cancel</Button>
+                </ModalFooter>
+            </Modal>
+
+            <Modal isOpen={importCandidate !== null} onClose={() => !saving && setImportCandidate(null)} variant="small">
+                <ModalHeader title="Import configuration?" />
+                <ModalBody>
+                    {importCandidate && (
+                        <>
+                            <p>
+                                Replace the current configuration with <strong>{importCandidate.services.length}</strong> imported bookmarks?
+                            </p>
+                            <p>The current configuration will be kept in History before the import is applied.</p>
+                        </>
+                    )}
+                </ModalBody>
+                <ModalFooter>
+                    <Button variant="primary" onClick={confirmImport} isDisabled={saving || !editMode}>
+                        {saving ? 'Importing…' : 'Import'}
+                    </Button>
+                    <Button variant="link" onClick={() => setImportCandidate(null)} isDisabled={saving}>Cancel</Button>
+                </ModalFooter>
+            </Modal>
+
+            <Modal isOpen={historyOpen} onClose={() => !saving && setHistoryOpen(false)} variant="medium">
+                <ModalHeader title="Configuration history" />
+                <ModalBody>
+                    {config.history.length === 0 ? (
+                        <p>No history yet. A snapshot is saved automatically before each configuration change.</p>
+                    ) : (
+                        <div className="bookmarks-history-list">
+                            {[...config.history].reverse().map(entry => (
+                                <div className="bookmarks-history-item" key={entry.id || `${entry.savedAt}-${entry.action}`}>
+                                    <div>
+                                        <strong>{entry.action || 'Configuration changed'}</strong>
+                                        <div>{formatHistoryDate(entry.savedAt)}</div>
+                                        <div>{entry.config?.services?.length ?? 0} bookmarks</div>
+                                    </div>
+                                    <Button
+                                        variant="secondary"
+                                        onClick={() => restoreHistory(entry)}
+                                        isDisabled={saving || !editMode}
+                                    >
+                                        Restore
+                                    </Button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </ModalBody>
+                <ModalFooter>
+                    <Button variant="secondary" onClick={() => setHistoryOpen(false)} isDisabled={saving}>Close</Button>
                 </ModalFooter>
             </Modal>
         </Page>
