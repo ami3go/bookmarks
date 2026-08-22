@@ -54,6 +54,10 @@ function formatHistoryDate(value) {
     }
 }
 
+function closeActionMenu(event) {
+    event.currentTarget.closest('details')?.removeAttribute('open');
+}
+
 export const Application = () => {
     const [config, setConfig] = useState(DEFAULT_CONFIG);
     const [query, setQuery] = useState('');
@@ -584,65 +588,74 @@ export const Application = () => {
                                                             <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
                                                             <span>{service.name || 'Unnamed service'}</span>
                                                         </div>
-                                                        {canEdit === true && (
+                                                        {editMode && canEdit === true && (
                                                             <div
                                                                 className="bookmark-card-actions"
                                                                 onClick={event => event.stopPropagation()}
                                                                 onKeyDown={event => event.stopPropagation()}
                                                             >
-                                                                {editMode && (
-                                                                    <>
-                                                                        <span
-                                                                            className="bookmark-drag-handle"
-                                                                            draggable
-                                                                            aria-hidden="true"
-                                                                            title="Drag to reorder"
-                                                                            onDragStart={event => {
-                                                                                setDragSource(service);
-                                                                                event.dataTransfer.effectAllowed = 'move';
-                                                                                event.dataTransfer.setData('text/plain', service.id || String(service.sourceIndex));
+                                                                <details className="bookmark-action-menu">
+                                                                    <summary
+                                                                        aria-label={`Actions for ${service.name || 'service'}`}
+                                                                        title="Actions; drag to reorder"
+                                                                        draggable={!saving}
+                                                                        onDragStart={event => {
+                                                                            setDragSource(service);
+                                                                            event.dataTransfer.effectAllowed = 'move';
+                                                                            event.dataTransfer.setData('text/plain', service.id || String(service.sourceIndex));
+                                                                        }}
+                                                                        onDragEnd={() => setDragSource(null)}
+                                                                    >
+                                                                        ⋮
+                                                                    </summary>
+                                                                    <div className="bookmark-action-menu-list">
+                                                                        <button
+                                                                            type="button"
+                                                                            className="bookmark-action-menu-item"
+                                                                            onClick={event => {
+                                                                                closeActionMenu(event);
+                                                                                openEdit(service);
                                                                             }}
-                                                                            onDragEnd={() => setDragSource(null)}
+                                                                            disabled={saving}
                                                                         >
-                                                                            ⋮⋮
-                                                                        </span>
-                                                                        <Button
-                                                                            variant="plain"
-                                                                            aria-label={`Move ${service.name} up`}
-                                                                            title="Move up"
-                                                                            isDisabled={!canMoveUp || saving}
-                                                                            onClick={() => moveWithinGroup(service, -1)}
+                                                                            Edit
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="bookmark-action-menu-item"
+                                                                            onClick={event => {
+                                                                                closeActionMenu(event);
+                                                                                moveWithinGroup(service, -1);
+                                                                            }}
+                                                                            disabled={!canMoveUp || saving}
                                                                         >
-                                                                            ↑
-                                                                        </Button>
-                                                                        <Button
-                                                                            variant="plain"
-                                                                            aria-label={`Move ${service.name} down`}
-                                                                            title="Move down"
-                                                                            isDisabled={!canMoveDown || saving}
-                                                                            onClick={() => moveWithinGroup(service, 1)}
+                                                                            ↑ Move up
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="bookmark-action-menu-item"
+                                                                            onClick={event => {
+                                                                                closeActionMenu(event);
+                                                                                moveWithinGroup(service, 1);
+                                                                            }}
+                                                                            disabled={!canMoveDown || saving}
                                                                         >
-                                                                            ↓
-                                                                        </Button>
-                                                                    </>
-                                                                )}
-                                                                <Button
-                                                                    variant="link"
-                                                                    isInline
-                                                                    isDisabled={!editMode || saving}
-                                                                    onClick={() => openEdit(service)}
-                                                                >
-                                                                    Edit
-                                                                </Button>
-                                                                <Button
-                                                                    variant="link"
-                                                                    isDanger
-                                                                    isInline
-                                                                    isDisabled={!editMode || saving}
-                                                                    onClick={() => requestDelete(service)}
-                                                                >
-                                                                    Delete
-                                                                </Button>
+                                                                            ↓ Move down
+                                                                        </button>
+                                                                        <div className="bookmark-action-menu-separator" />
+                                                                        <button
+                                                                            type="button"
+                                                                            className="bookmark-action-menu-item is-danger"
+                                                                            onClick={event => {
+                                                                                closeActionMenu(event);
+                                                                                requestDelete(service);
+                                                                            }}
+                                                                            disabled={saving}
+                                                                        >
+                                                                            Delete
+                                                                        </button>
+                                                                    </div>
+                                                                </details>
                                                             </div>
                                                         )}
                                                     </div>
