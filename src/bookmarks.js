@@ -2,12 +2,14 @@ export const CONFIG_PATH = '/etc/cockpit/cockpit-bookmarks.json';
 export const MAX_CONFIG_SIZE = 1048576;
 export const HISTORY_LIMIT = 10;
 export const EDIT_MODE_TIMEOUT_MS = 120000;
+export const DISPLAY_MODES = ['cards', 'compact'];
 
 export const DEFAULT_CONFIG = {
     title: 'Cockpit Bookmarks',
     subtitle: 'Services hosted on this mini PC',
     eyebrow: 'Mini PC',
     showEyebrow: true,
+    displayMode: 'cards',
     services: [],
     history: [],
 };
@@ -50,6 +52,10 @@ export function allowedUrl(url) {
     }
 }
 
+export function normalizeDisplayMode(value) {
+    return DISPLAY_MODES.includes(value) ? value : DEFAULT_CONFIG.displayMode;
+}
+
 export function normalizeConfig(config) {
     if (!config || typeof config !== 'object' || !Array.isArray(config.services))
         throw new Error('Configuration must contain a services array.');
@@ -60,6 +66,7 @@ export function normalizeConfig(config) {
         subtitle: String(config.subtitle || DEFAULT_CONFIG.subtitle),
         eyebrow: String(config.eyebrow ?? DEFAULT_CONFIG.eyebrow),
         showEyebrow: config.showEyebrow !== false,
+        displayMode: normalizeDisplayMode(config.displayMode),
         services: config.services,
         history: Array.isArray(config.history) ? config.history : [],
     };
@@ -219,6 +226,7 @@ function snapshotConfig(config) {
         subtitle: config.subtitle,
         eyebrow: config.eyebrow,
         showEyebrow: config.showEyebrow,
+        displayMode: config.displayMode,
         services: JSON.parse(JSON.stringify(config.services)),
     };
 }
@@ -251,6 +259,7 @@ export function restoreHistoryEntry(current, entry) {
     return {
         ...normalizeConfig(current),
         ...entry.config,
+        displayMode: normalizeDisplayMode(entry.config.displayMode),
         services: JSON.parse(JSON.stringify(entry.config.services)),
         history: current.history,
     };
