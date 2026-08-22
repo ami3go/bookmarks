@@ -2,7 +2,7 @@
 
 ## v0.4.0 — management release
 
-Status: implementation complete on the `v0.4-management` branch, pending final build verification and merge.
+Status: merged to `main`. Local helper tests and JavaScript/JSX syntax checks passed; full npm/esbuild and Cockpit smoke testing are still pending.
 
 ### Phase 1 — safer editing
 
@@ -59,6 +59,7 @@ Status: implementation complete on the `v0.4-management` branch, pending final b
 
 - [x] JavaScript/JSX syntax review
 - [x] Unit tests added for pure configuration logic
+- [x] Run the helper test suite locally (9/9 passing)
 - [ ] Run `npm test` from a fresh checkout
 - [ ] Run `make clean && make` with npm registry access
 - [ ] Install with `sudo make install install-config`
