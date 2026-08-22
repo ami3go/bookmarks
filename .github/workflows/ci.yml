@@ -35,16 +35,35 @@ jobs:
 
       - name: Verify release files
         run: |
+          version=$(node -p "require('./package.json').version")
+          root="cockpit-bookmarks-${version}"
+          archive="release/${root}.tar.gz"
           test -s dist/index.html
           test -s dist/index.css
           test -s dist/index.js
           test -s dist/manifest.json
           test ! -e dist/index.js.map
           test ! -e dist/index.css.map
-          test -s release/cockpit-bookmarks-0.4.0.tar.gz
-          tar -tzf release/cockpit-bookmarks-0.4.0.tar.gz | grep -Fx 'cockpit-bookmarks-0.4.0/dist/index.html'
-          tar -tzf release/cockpit-bookmarks-0.4.0.tar.gz | grep -Fx 'cockpit-bookmarks-0.4.0/Makefile'
-          tar -tzf release/cockpit-bookmarks-0.4.0.tar.gz | grep -Fx 'cockpit-bookmarks-0.4.0/LICENSE'
+          test -s "$archive"
+          tar -tzf "$archive" | grep -Fx "$root/dist/index.html"
+          tar -tzf "$archive" | grep -Fx "$root/Makefile"
+          tar -tzf "$archive" | grep -Fx "$root/package.json"
+          tar -tzf "$archive" | grep -Fx "$root/LICENSE"
+
+      - name: Test prebuilt install without Node.js
+        run: |
+          version=$(node -p "require('./package.json').version")
+          root="cockpit-bookmarks-${version}"
+          archive="release/${root}.tar.gz"
+          workdir=$(mktemp -d)
+          tar -xzf "$archive" -C "$workdir"
+          env PATH=/usr/bin:/bin make -C "$workdir/$root" \
+            DESTDIR="$workdir/root" install-prebuilt install-config
+          test -s "$workdir/root/usr/local/share/cockpit/cockpit-bookmarks/index.html"
+          test -s "$workdir/root/usr/local/share/cockpit/cockpit-bookmarks/index.css"
+          test -s "$workdir/root/usr/local/share/cockpit/cockpit-bookmarks/index.js"
+          test -s "$workdir/root/usr/local/share/cockpit/cockpit-bookmarks/manifest.json"
+          test -s "$workdir/root/etc/cockpit/cockpit-bookmarks.json"
 
       - name: Upload production bundle
         uses: actions/upload-artifact@v4
@@ -57,5 +76,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cockpit-bookmarks-release
-          path: release/cockpit-bookmarks-0.4.0.tar.gz
+          path: release/cockpit-bookmarks-*.tar.gz
           if-no-files-found: error
