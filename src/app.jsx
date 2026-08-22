@@ -23,9 +23,10 @@ import {
     editableBookmark,
     expandUrl,
     findBookmarkIndex,
-    groupNames,
+    moveGroup,
     moveService,
     normalizeConfig,
+    normalizeGroupOrder,
     normalizeImportedConfig,
     restoreHistoryEntry,
     serviceGroup,
@@ -175,7 +176,10 @@ export const Application = () => {
         };
     }, [editMode, editor, deleteTarget, settingsOpen, importCandidate, historyOpen]);
 
-    const groups = useMemo(() => groupNames(config.services), [config.services]);
+    const groups = useMemo(
+        () => normalizeGroupOrder(config.services, config.groupOrder),
+        [config.services, config.groupOrder]
+    );
 
     useEffect(() => {
         if (groupFilter !== 'all' && !groups.includes(groupFilter))
@@ -209,8 +213,10 @@ export const Application = () => {
                 result.set(group, []);
             result.get(group).push(service);
         }
-        return [...result.entries()];
-    }, [services]);
+        return groups
+            .filter(group => result.has(group))
+            .map(group => [group, result.get(group)]);
+    }, [services, groups]);
 
     const currentTarget = editor?.mode === 'edit' ? editor.target : null;
     const warnings = useMemo(
@@ -389,6 +395,18 @@ export const Application = () => {
             sourceIndex: targetIndex,
             resolvedUrl: expandUrl(config.services[targetIndex].url, hostname),
         });
+    };
+
+    const moveGroupWithinOrder = (group, direction) => {
+        const position = groups.indexOf(group);
+        const targetPosition = position + direction;
+        if (position === -1 || targetPosition < 0 || targetPosition >= groups.length)
+            return;
+
+        modifyConfig(current => {
+            const currentOrder = normalizeGroupOrder(current.services, current.groupOrder);
+            return { ...current, groupOrder: moveGroup(currentOrder, group, direction) };
+        }, 'Group order updated.', undefined, `Moved ${group} group ${direction < 0 ? 'up' : 'down'}`);
     };
 
     const toggleEditMode = () => {
@@ -586,6 +604,32 @@ export const Application = () => {
                                 <div className="bookmark-group-heading">
                                     <h2 id={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>{group}</h2>
                                     <span>{groupServices.length}</span>
+                                    {editMode && canEdit === true && groups.length > 1 && (
+                                        <div
+                                            style={{ display: 'flex', gap: '0.15rem', marginLeft: 'auto' }}
+                                            onClick={event => event.stopPropagation()}
+                                            onKeyDown={event => event.stopPropagation()}
+                                        >
+                                            <Button
+                                                variant="plain"
+                                                aria-label={`Move ${group} group up`}
+                                                title="Move group up"
+                                                isDisabled={groups[0] === group || saving}
+                                                onClick={() => moveGroupWithinOrder(group, -1)}
+                                            >
+                                                ↑
+                                            </Button>
+                                            <Button
+                                                variant="plain"
+                                                aria-label={`Move ${group} group down`}
+                                                title="Move group down"
+                                                isDisabled={groups[groups.length - 1] === group || saving}
+                                                onClick={() => moveGroupWithinOrder(group, 1)}
+                                            >
+                                                ↓
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                                 <div
                                     className="bookmarks-grid"
