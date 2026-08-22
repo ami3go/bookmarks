@@ -153,8 +153,27 @@
     outline-offset: 3px;
 }
 
+.bookmark-card.is-editable {
+    cursor: grab;
+}
+
+.bookmark-card.is-editable:active {
+    cursor: grabbing;
+}
+
+.bookmark-card.is-selected {
+    outline: 2px solid var(--pf-t--global--color--brand--default, currentcolor);
+    outline-offset: 2px;
+    box-shadow: var(--pf-t--global--box-shadow--md, 0 0.25rem 0.75rem rgba(0, 0, 0, 0.22));
+}
+
 .bookmark-card.is-dragging {
-    opacity: 0.55;
+    opacity: 0.65;
+    transform: scale(0.985);
+}
+
+.bookmark-card.is-dragging.is-selected {
+    outline-width: 3px;
 }
 
 .bookmark-title-row {
@@ -227,10 +246,6 @@
 .bookmark-action-menu > summary:focus-visible {
     outline: 2px solid currentcolor;
     outline-offset: 1px;
-}
-
-.bookmark-action-menu > summary:active {
-    cursor: grabbing;
 }
 
 .bookmark-action-menu-list {
