@@ -1,21 +1,40 @@
-// Adapted from Cockpit's pkg/lib/cockpit-dark-theme.ts (LGPL-2.1-or-later).
+const SHELL_STYLE_KEY = 'shell:style';
+const DARK_THEME_CLASS = 'pf-v6-theme-dark';
+const colorScheme = window.matchMedia?.('(prefers-color-scheme: dark)');
 
-function setDarkMode(styleOverride) {
-    const style = styleOverride || localStorage.getItem('shell:style') || 'auto';
-    const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-    const dark = style === 'dark' || (style === 'auto' && prefersDark);
-    document.documentElement.classList.toggle('pf-v6-theme-dark', Boolean(dark));
+function readShellStyle() {
+    try {
+        return window.localStorage.getItem(SHELL_STYLE_KEY) || 'auto';
+    } catch (_) {
+        return 'auto';
+    }
 }
 
-window.addEventListener('storage', event => {
-    if (event.key === 'shell:style')
-        setDarkMode();
-});
+function prefersDark(style) {
+    if (style === 'dark')
+        return true;
+    if (style === 'light')
+        return false;
+    return Boolean(colorScheme?.matches);
+}
+
+function applyTheme(style = readShellStyle()) {
+    document.documentElement.classList.toggle(DARK_THEME_CLASS, prefersDark(style));
+}
 
 window.addEventListener('cockpit-style', event => {
-    if (event instanceof CustomEvent)
-        setDarkMode(event.detail?.style);
+    const style = event instanceof CustomEvent ? event.detail?.style : undefined;
+    applyTheme(style || readShellStyle());
 });
 
-window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', () => setDarkMode());
-setDarkMode();
+window.addEventListener('storage', event => {
+    if (event.key === SHELL_STYLE_KEY)
+        applyTheme();
+});
+
+colorScheme?.addEventListener?.('change', () => {
+    if (readShellStyle() === 'auto')
+        applyTheme('auto');
+});
+
+applyTheme();
