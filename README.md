@@ -1,6 +1,6 @@
-# Cockpit Local Services
+# Cockpit Bookmarks
 
-A tiny Cockpit extension that adds a **Local Services** page for bookmarks to web services hosted on the same mini PC.
+A tiny Cockpit extension that adds a **Bookmarks** page for web services hosted on the same mini PC.
 
 It is intentionally lightweight:
 
@@ -10,38 +10,46 @@ It is intentionally lightweight:
 - no Node.js/Python runtime dependency
 - no external JavaScript or icon libraries
 
-Cockpit serves the static HTML/CSS/JavaScript. The page reads its bookmark configuration from `/etc/cockpit/local-services.json` through Cockpit's built-in `cockpit.file()` API.
+Cockpit serves the static HTML/CSS/JavaScript. The page reads its bookmark configuration from `/etc/cockpit/cockpit-bookmarks.json` through Cockpit's built-in `cockpit.file()` API.
 
 ## Install
 
 Clone this repository on the mini PC and run:
 
 ```bash
+git clone https://github.com/ami3go/cockpit-bookmarks.git
+cd cockpit-bookmarks
 sudo sh install.sh
 ```
 
-Then reload Cockpit. **Local Services** will appear in the Cockpit sidebar under Tools.
+Then reload Cockpit. **Bookmarks** will appear in the Cockpit sidebar under Tools.
 
 The installer copies the extension to:
 
 ```text
-/usr/local/share/cockpit/local-services/
+/usr/local/share/cockpit/cockpit-bookmarks/
 ```
 
 and creates an example configuration at:
 
 ```text
-/etc/cockpit/local-services.json
+/etc/cockpit/cockpit-bookmarks.json
 ```
 
 if that file does not already exist.
+
+## Upgrade from the old `bookmarks` / `local-services` version
+
+The installer is migration-aware. If `/etc/cockpit/local-services.json` exists and the new configuration does not, it copies the existing configuration to `/etc/cockpit/cockpit-bookmarks.json`. It also removes the old `/usr/local/share/cockpit/local-services/` package directory so Cockpit does not show duplicate entries.
+
+The legacy configuration file is left untouched as a backup.
 
 ## Configure bookmarks
 
 Edit:
 
 ```bash
-sudo nano /etc/cockpit/local-services.json
+sudo nano /etc/cockpit/cockpit-bookmarks.json
 ```
 
 Example:
@@ -98,7 +106,7 @@ git pull
 sudo sh install.sh
 ```
 
-Your `/etc/cockpit/local-services.json` is preserved.
+Your `/etc/cockpit/cockpit-bookmarks.json` is preserved.
 
 ## Uninstall
 
@@ -106,7 +114,7 @@ Your `/etc/cockpit/local-services.json` is preserved.
 sudo sh uninstall.sh
 ```
 
-The uninstall script removes the Cockpit extension but leaves the configuration file in place.
+The uninstall script removes the Cockpit extension but leaves configuration files in place.
 
 ## Compatibility
 
