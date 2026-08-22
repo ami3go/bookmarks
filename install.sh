@@ -1,11 +1,14 @@
 #!/bin/sh
 set -eu
 
-PACKAGE_NAME="local-services"
+PACKAGE_NAME="cockpit-bookmarks"
+LEGACY_PACKAGE_NAME="local-services"
 SOURCE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 INSTALL_DIR="/usr/local/share/cockpit/$PACKAGE_NAME"
+LEGACY_INSTALL_DIR="/usr/local/share/cockpit/$LEGACY_PACKAGE_NAME"
 CONFIG_DIR="/etc/cockpit"
-CONFIG_FILE="$CONFIG_DIR/local-services.json"
+CONFIG_FILE="$CONFIG_DIR/cockpit-bookmarks.json"
+LEGACY_CONFIG_FILE="$CONFIG_DIR/local-services.json"
 
 if [ "$(id -u)" -ne 0 ]; then
   echo "Run this installer as root, for example: sudo sh install.sh" >&2
@@ -21,10 +24,20 @@ install -m 0644 \
   "$INSTALL_DIR/"
 
 if [ ! -e "$CONFIG_FILE" ]; then
-  install -m 0644 "$SOURCE_DIR/examples/services.json" "$CONFIG_FILE"
-  echo "Created example configuration: $CONFIG_FILE"
+  if [ -e "$LEGACY_CONFIG_FILE" ]; then
+    cp -p "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+    echo "Migrated configuration: $LEGACY_CONFIG_FILE -> $CONFIG_FILE"
+  else
+    install -m 0644 "$SOURCE_DIR/examples/services.json" "$CONFIG_FILE"
+    echo "Created example configuration: $CONFIG_FILE"
+  fi
 else
   echo "Keeping existing configuration: $CONFIG_FILE"
+fi
+
+if [ -d "$LEGACY_INSTALL_DIR" ] && [ "$LEGACY_INSTALL_DIR" != "$INSTALL_DIR" ]; then
+  rm -rf -- "$LEGACY_INSTALL_DIR"
+  echo "Removed legacy Cockpit package: $LEGACY_INSTALL_DIR"
 fi
 
 if command -v cockpit-bridge >/dev/null 2>&1; then
@@ -34,5 +47,5 @@ if command -v cockpit-bridge >/dev/null 2>&1; then
 fi
 
 echo
-echo "Installed Cockpit Local Services in $INSTALL_DIR"
+echo "Installed Cockpit Bookmarks in $INSTALL_DIR"
 echo "Edit $CONFIG_FILE, then reload Cockpit in your browser."
