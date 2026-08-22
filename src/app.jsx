@@ -46,6 +46,14 @@ function runtimeFreeService(service) {
     return storedService;
 }
 
+function serviceSelectionKey(service) {
+    if (service.id)
+        return `id:${service.id}`;
+
+    const tags = Array.isArray(service.tags) ? service.tags.join('\u001f') : String(service.tags || '');
+    return `legacy:${service.name || ''}\u001f${service.url || ''}\u001f${service.description || ''}\u001f${service.group || ''}\u001f${service.icon || ''}\u001f${tags}`;
+}
+
 function formatHistoryDate(value) {
     try {
         return new Date(value).toLocaleString();
@@ -65,6 +73,7 @@ export const Application = () => {
     const [notice, setNotice] = useState(null);
     const [canEdit, setCanEdit] = useState(null);
     const [editMode, setEditMode] = useState(false);
+    const [selectedBookmark, setSelectedBookmark] = useState(null);
     const [editor, setEditor] = useState(null);
     const [draft, setDraft] = useState(EMPTY_BOOKMARK);
     const [formErrors, setFormErrors] = useState({});
@@ -135,6 +144,13 @@ export const Application = () => {
             permission.close();
         };
     }, []);
+
+    useEffect(() => {
+        if (!editMode) {
+            setSelectedBookmark(null);
+            setDragSource(null);
+        }
+    }, [editMode]);
 
     useEffect(() => {
         if (!editMode || editor || deleteTarget || settingsOpen || importCandidate || historyOpen)
@@ -247,6 +263,7 @@ export const Application = () => {
         if (!editMode || canEdit !== true)
             return;
 
+        setSelectedBookmark(serviceSelectionKey(service));
         const storedService = runtimeFreeService(service);
         setDraft(editableBookmark(storedService));
         setFormErrors({});
@@ -294,13 +311,17 @@ export const Application = () => {
             const updatedServices = [...current.services];
             updatedServices[index] = storedBookmark(draft, updatedServices[index]);
             return { ...current, services: updatedServices };
-        }, 'Bookmark updated.', () => setEditor(null), `Edited ${draft.name.trim()}`);
+        }, 'Bookmark updated.', () => {
+            setEditor(null);
+            setSelectedBookmark(null);
+        }, `Edited ${draft.name.trim()}`);
     };
 
     const requestDelete = service => {
         if (!editMode || canEdit !== true)
             return;
 
+        setSelectedBookmark(serviceSelectionKey(service));
         setDeleteTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
     };
 
@@ -314,11 +335,19 @@ export const Application = () => {
                 ...current,
                 services: current.services.filter((_, serviceIndex) => serviceIndex !== index),
             };
-        }, 'Bookmark deleted.', () => setDeleteTarget(null), `Deleted ${deleteTarget?.service?.name || 'bookmark'}`);
+        }, 'Bookmark deleted.', () => {
+            setDeleteTarget(null);
+            setSelectedBookmark(null);
+        }, `Deleted ${deleteTarget?.service?.name || 'bookmark'}`);
     };
 
     const openService = service => {
         window.open(service.resolvedUrl, '_blank', 'noopener,noreferrer');
+    };
+
+    const selectService = service => {
+        if (editMode && canEdit === true)
+            setSelectedBookmark(serviceSelectionKey(service));
     };
 
     const reorderBetween = (source, target) => {
@@ -350,6 +379,7 @@ export const Application = () => {
         if (position === -1 || targetPosition < 0 || targetPosition >= siblingIndexes.length)
             return;
 
+        setSelectedBookmark(serviceSelectionKey(service));
         const targetIndex = siblingIndexes[targetPosition];
         reorderBetween(service, {
             ...config.services[targetIndex],
@@ -435,13 +465,17 @@ export const Application = () => {
             setImportCandidate(null);
             setQuery('');
             setGroupFilter('all');
+            setSelectedBookmark(null);
         }, 'Imported configuration');
     };
 
     const restoreHistory = entry => {
         if (!editMode)
             return;
-        modifyConfig(current => restoreHistoryEntry(current, entry), 'Configuration restored.', () => setHistoryOpen(false), 'Restored history snapshot');
+        modifyConfig(current => restoreHistoryEntry(current, entry), 'Configuration restored.', () => {
+            setHistoryOpen(false);
+            setSelectedBookmark(null);
+        }, 'Restored history snapshot');
     };
 
     const clearFilters = () => {
@@ -500,7 +534,7 @@ export const Application = () => {
                     <div className="bookmarks-management-bar">
                         <div>
                             <strong>Edit mode enabled.</strong>
-                            <span> It locks automatically after 2 minutes of inactivity.</span>
+                            <span> Click a card to select it, or drag a card to reorder. Edit mode locks automatically after 2 minutes of inactivity.</span>
                         </div>
                         <div className="bookmarks-management-actions">
                             <Button variant="secondary" onClick={openSettings}>Page settings</Button>
@@ -557,24 +591,52 @@ export const Application = () => {
                                         const groupPosition = siblingIndexes.indexOf(service.sourceIndex);
                                         const canMoveUp = groupPosition > 0;
                                         const canMoveDown = groupPosition >= 0 && groupPosition < siblingIndexes.length - 1;
+                                        const selectionKey = serviceSelectionKey(service);
+                                        const isSelected = editMode && selectedBookmark === selectionKey;
+                                        const isDragging = dragSource?.sourceIndex === service.sourceIndex;
 
                                         return (
                                             <Card
-                                                className={`bookmark-card${dragSource?.sourceIndex === service.sourceIndex ? ' is-dragging' : ''}`}
+                                                className={`bookmark-card${editMode ? ' is-editable' : ''}${isSelected ? ' is-selected' : ''}${isDragging ? ' is-dragging' : ''}`}
                                                 key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
-                                                role="link"
+                                                role={editMode ? 'button' : 'link'}
                                                 tabIndex={0}
-                                                aria-label={`Open ${service.name || 'service'} in a new tab`}
-                                                onClick={() => openService(service)}
-                                                onKeyDown={event => {
-                                                    if (event.key === 'Enter') {
-                                                        event.preventDefault();
+                                                draggable={editMode && canEdit === true && !saving}
+                                                aria-label={editMode
+                                                    ? `Select ${service.name || 'service'} for reordering`
+                                                    : `Open ${service.name || 'service'} in a new tab`}
+                                                aria-pressed={editMode ? isSelected : undefined}
+                                                onClick={() => {
+                                                    if (editMode && canEdit === true)
+                                                        selectService(service);
+                                                    else
                                                         openService(service);
+                                                }}
+                                                onKeyDown={event => {
+                                                    if (event.key === 'Enter' || (editMode && event.key === ' ')) {
+                                                        event.preventDefault();
+                                                        if (editMode && canEdit === true)
+                                                            selectService(service);
+                                                        else if (event.key === 'Enter')
+                                                            openService(service);
                                                     }
                                                 }}
-                                                onDragOver={event => {
-                                                    if (editMode && dragSource && serviceGroup(dragSource) === serviceGroup(service))
+                                                onDragStart={event => {
+                                                    if (!editMode || canEdit !== true || saving) {
                                                         event.preventDefault();
+                                                        return;
+                                                    }
+                                                    setSelectedBookmark(selectionKey);
+                                                    setDragSource(service);
+                                                    event.dataTransfer.effectAllowed = 'move';
+                                                    event.dataTransfer.setData('text/plain', service.id || String(service.sourceIndex));
+                                                }}
+                                                onDragEnd={() => setDragSource(null)}
+                                                onDragOver={event => {
+                                                    if (editMode && dragSource && serviceGroup(dragSource) === serviceGroup(service)) {
+                                                        event.preventDefault();
+                                                        event.dataTransfer.dropEffect = 'move';
+                                                    }
                                                 }}
                                                 onDrop={event => {
                                                     event.preventDefault();
@@ -591,20 +653,16 @@ export const Application = () => {
                                                         {editMode && canEdit === true && (
                                                             <div
                                                                 className="bookmark-card-actions"
-                                                                onClick={event => event.stopPropagation()}
+                                                                onClick={event => {
+                                                                    event.stopPropagation();
+                                                                    setSelectedBookmark(selectionKey);
+                                                                }}
                                                                 onKeyDown={event => event.stopPropagation()}
                                                             >
                                                                 <details className="bookmark-action-menu">
                                                                     <summary
                                                                         aria-label={`Actions for ${service.name || 'service'}`}
-                                                                        title="Actions; drag to reorder"
-                                                                        draggable={!saving}
-                                                                        onDragStart={event => {
-                                                                            setDragSource(service);
-                                                                            event.dataTransfer.effectAllowed = 'move';
-                                                                            event.dataTransfer.setData('text/plain', service.id || String(service.sourceIndex));
-                                                                        }}
-                                                                        onDragEnd={() => setDragSource(null)}
+                                                                        title="Actions"
                                                                     >
                                                                         ⋮
                                                                     </summary>
