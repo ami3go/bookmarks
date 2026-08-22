@@ -35,7 +35,7 @@
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    width: min(36rem, 100%);
+    width: min(38rem, 100%);
 }
 
 .bookmarks-header-actions > :first-child {
@@ -45,6 +45,16 @@
 .bookmarks-header-actions > .pf-v6-c-button {
     flex: 0 0 auto;
     white-space: nowrap;
+}
+
+.bookmark-edit-mode-toggle {
+    min-width: 2.5rem;
+}
+
+.bookmark-edit-mode-toggle svg {
+    display: block;
+    width: 1rem;
+    height: 1rem;
 }
 
 .bookmarks-notice {
@@ -167,13 +177,21 @@
     }
 
     .bookmarks-header-actions {
-        align-items: stretch;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: 1fr auto;
         width: 100%;
     }
 
+    .bookmarks-header-actions > :first-child {
+        grid-column: 1 / -1;
+    }
+
     .bookmarks-header-actions > .pf-v6-c-button {
-        width: 100%;
+        width: auto;
+    }
+
+    .bookmark-edit-mode-toggle {
+        justify-self: end;
     }
 
     .bookmark-title-row {
