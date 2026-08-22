@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "requires": {
+    "cockpit": "239"
+  },
+  "tools": {
+    "bookmarks": {
+      "label": "Bookmarks",
+      "order": 55,
+      "path": "index.html",
+      "keywords": [
+        {
+          "matches": ["services", "bookmarks", "links", "apps"],
+          "translate": false
+        }
+      ]
+    }
+  }
+}
