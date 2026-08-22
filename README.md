@@ -1,48 +1,105 @@
-# Cockpit Bookmarks
+# Cockpit Bookmarks — Starter Kit trial
 
-A tiny Cockpit extension that adds a **Bookmarks** page for web services hosted on the same mini PC.
+This branch is a trial refactor of **Cockpit Bookmarks** toward the official Cockpit Starter Kit development model.
 
-It is intentionally lightweight:
+It keeps the plugin lightweight at runtime:
 
 - no Docker
 - no daemon or background service
 - no database
-- no Node.js/Python runtime dependency
-- no external JavaScript or icon libraries
+- no Node.js process after installation
+- no Python runtime
 
-Cockpit serves the static HTML/CSS/JavaScript. The page reads its bookmark configuration from `/etc/cockpit/cockpit-bookmarks.json` through Cockpit's built-in `cockpit.file()` API.
+React, PatternFly, Node.js and esbuild are **build-time dependencies only**. The build output is static HTML/CSS/JavaScript served by Cockpit from `dist/`.
 
-## Install
+## What changed in this branch
 
-Clone this repository on the mini PC and run:
+The application source now lives under `src/`, builds into `dist/`, uses React + PatternFly 6, follows Cockpit's current dark/light theme, and provides Starter-Kit-style `make` targets for development and installation.
+
+This is intentionally a smaller scaffold than the full upstream Starter Kit. RPM/Packit packaging, translations, VM integration tests and release automation are not included yet.
+
+## Branch safety
+
+The existing implementation remains untouched on `main`.
+
+To try this version:
 
 ```bash
-git clone https://github.com/ami3go/cockpit-bookmarks.git
-cd cockpit-bookmarks
-sudo sh install.sh
+git switch starter-kit-trial
 ```
 
-Then reload Cockpit. **Bookmarks** will appear in the Cockpit sidebar under Tools.
+To return to the current implementation:
 
-The installer copies the extension to:
+```bash
+git switch main
+```
+
+## Build
+
+Development packages are installed only for the build:
+
+```bash
+make
+```
+
+`make` runs `npm install` the first time and produces:
+
+```text
+dist/
+├── index.html
+├── index.css
+├── index.js
+└── manifest.json
+```
+
+For a smaller production bundle:
+
+```bash
+NODE_ENV=production make clean all
+```
+
+## Development install
+
+Install the built `dist/` tree for your current user:
+
+```bash
+make devel-install
+```
+
+Create the example system configuration once:
+
+```bash
+sudo make install-config
+```
+
+Reload Cockpit. **Bookmarks** should appear under Tools.
+
+Remove the development symlink with:
+
+```bash
+make devel-uninstall
+```
+
+## System install
+
+Build and install the Cockpit package system-wide:
+
+```bash
+make
+sudo make install install-config
+```
+
+The application is installed at:
 
 ```text
 /usr/local/share/cockpit/cockpit-bookmarks/
 ```
 
-and creates an example configuration at:
+The bookmark configuration is stored at:
 
 ```text
 /etc/cockpit/cockpit-bookmarks.json
 ```
-
-if that file does not already exist.
-
-## Upgrade from the old `bookmarks` / `local-services` version
-
-The installer is migration-aware. If `/etc/cockpit/local-services.json` exists and the new configuration does not, it copies the existing configuration to `/etc/cockpit/cockpit-bookmarks.json`. It also removes the old `/usr/local/share/cockpit/local-services/` package directory so Cockpit does not show duplicate entries.
-
-The legacy configuration file is left untouched as a backup.
 
 ## Configure bookmarks
 
@@ -65,62 +122,40 @@ Example:
       "url": "http://{host}:3000",
       "icon": "📊",
       "group": "Monitoring"
-    },
-    {
-      "name": "AdGuard Home",
-      "description": "DNS and ad blocking",
-      "url": "http://{host}:3000",
-      "icon": "🛡️",
-      "group": "Network"
     }
   ]
 }
 ```
 
-`{host}` is replaced in the browser with the hostname or IP address that you used to open Cockpit. For example, if Cockpit is open at `https://192.168.1.50:9090`, then `http://{host}:3000` becomes `http://192.168.1.50:3000`.
+`{host}` is replaced in the browser with the hostname or IP address used to open Cockpit. For example, when Cockpit is open at `https://192.168.1.50:9090`, `http://{host}:3000` becomes `http://192.168.1.50:3000`.
 
-This avoids the common `localhost` problem: a bookmark to `http://localhost:3000` would refer to the computer running your browser, not the mini PC.
+Only `http://` and `https://` bookmark targets are accepted. Links open in a new browser tab with `noopener noreferrer`.
 
-## Important limitation: services bound only to 127.0.0.1
+## Source layout
 
-A bookmark cannot make a service that listens only on `127.0.0.1` reachable from another computer. Such a service needs to listen on the mini PC's LAN interface or be exposed through a reverse proxy. Keep the service protected by your LAN firewall and authentication as appropriate.
-
-## JSON fields
-
-Each service supports:
-
-- `name` — required display name
-- `url` — required `http://` or `https://` URL; `{host}` is supported
-- `description` — optional secondary text
-- `icon` — optional text or emoji
-- `group` — optional small category label
-
-The page also includes client-side filtering. It deliberately does not perform health checks, because browser CORS rules and self-signed HTTPS certificates make generic status probing unreliable.
-
-## Update
-
-Pull the latest version and rerun the installer:
-
-```bash
-git pull
-sudo sh install.sh
+```text
+cockpit-bookmarks/
+├── src/
+│   ├── app.jsx
+│   ├── app.css
+│   ├── cockpit-dark-theme.js
+│   ├── index.jsx
+│   └── manifest.json
+├── examples/
+│   └── cockpit-bookmarks.json
+├── build.js
+├── Makefile
+├── package.json
+└── README.md
 ```
 
-Your `/etc/cockpit/cockpit-bookmarks.json` is preserved.
+## Runtime footprint
 
-## Uninstall
+Node.js, npm, React source files and `node_modules/` are not required by the installed plugin. Cockpit serves the compiled files from `dist/`; React and PatternFly execute in the browser.
 
-```bash
-sudo sh uninstall.sh
-```
+## Important limitation
 
-The uninstall script removes the Cockpit extension but leaves configuration files in place.
-
-## Compatibility
-
-The package uses Cockpit's documented package manifest and `cockpit.js` file API. It declares Cockpit 239 or newer.
-
-Cockpit searches `/usr/local/share/cockpit/` for system-wide locally installed packages, so this extension does not modify files under `/usr/share/cockpit/` that belong to your OS package manager.
+A bookmark cannot make a service listening only on `127.0.0.1` reachable from another computer. Such a service must listen on an appropriate LAN interface or be exposed through a reverse proxy.
 
 ## License
 
