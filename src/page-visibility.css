@@ -6,3 +6,40 @@
     display: grid;
     gap: 0.45rem;
 }
+
+/*
+ * Page settings are edited in a modal and are not persisted until Save.
+ * Preview the checkbox state immediately against the page behind the modal so
+ * each visibility control has an unambiguous, independent effect.
+ */
+body:has(#settings-show-header:not(:checked)) .bookmarks-eyebrow,
+body:has(#settings-show-header:not(:checked)) .bookmarks-subtitle {
+    display: none;
+}
+
+body:has(#settings-show-title:not(:checked)) .bookmarks-heading h1 {
+    display: none;
+}
+
+body:has(#settings-show-search:not(:checked)) .bookmarks-search {
+    display: none;
+}
+
+/*
+ * When Search is hidden, do not leave the Group filter sitting in the wide
+ * search column. Keep the remaining controls compact so a Group select cannot
+ * be mistaken for a still-visible search field.
+ */
+.bookmarks-header-actions:not(:has(.bookmarks-search)),
+body:has(#settings-show-search:not(:checked)) .bookmarks-header-actions {
+    grid-template-columns: minmax(9rem, auto) auto auto;
+    justify-content: end;
+}
+
+@media (max-width: 720px) {
+    .bookmarks-header-actions:not(:has(.bookmarks-search)),
+    body:has(#settings-show-search:not(:checked)) .bookmarks-header-actions {
+        grid-template-columns: 1fr auto;
+        justify-content: stretch;
+    }
+}
