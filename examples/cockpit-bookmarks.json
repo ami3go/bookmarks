@@ -3,6 +3,9 @@
   "subtitle": "Services hosted on this mini PC",
   "eyebrow": "Mini PC",
   "showEyebrow": true,
+  "showHeader": true,
+  "showTitle": true,
+  "showSearch": true,
   "displayMode": "compact",
   "groupOrder": ["Apps", "Monitoring", "Discovered"],
   "services": [
