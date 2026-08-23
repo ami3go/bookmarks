@@ -1,0 +1,11 @@
+.bookmark-select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.25rem;
+    padding: 0.35rem 0.65rem;
+    color: inherit;
+    background: transparent;
+    border: 1px solid currentcolor;
+    border-radius: 3px;
+    font: inherit;
+}
