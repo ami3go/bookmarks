@@ -1,0 +1,19 @@
+:root {
+    color-scheme: light;
+}
+
+:root.pf-v6-theme-dark {
+    color-scheme: dark;
+}
+
+/*
+ * Native select/datalist popups are painted by the browser rather than
+ * PatternFly. Keep their system colors synchronized with the Cockpit theme
+ * so a dark-theme text color is never rendered on a light native popup.
+ */
+.bookmarks-group-filter select option,
+.bookmark-select option,
+#bookmark-group-options option {
+    color: CanvasText;
+    background-color: Canvas;
+}
