@@ -1,0 +1,111 @@
+#cockpit-bookmarks-service-discovery {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 9000;
+}
+
+.bookmarks-discovery-launcher {
+    box-shadow: var(--pf-t--global--box-shadow--md, 0 0.25rem 0.75rem rgba(0, 0, 0, 0.22));
+}
+
+.bookmarks-discovery-intro {
+    margin-top: 0;
+    line-height: 1.5;
+}
+
+.bookmarks-discovery-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 1rem 0 0.6rem;
+    font-size: 0.875rem;
+}
+
+.bookmarks-discovery-toolbar > div {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.bookmarks-discovery-list {
+    display: grid;
+    gap: 0.5rem;
+    max-height: 48vh;
+    margin-bottom: 1rem;
+    overflow: auto;
+}
+
+.bookmarks-discovery-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--pf-t--global--border--color--default, currentcolor);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.bookmarks-discovery-item.is-disabled {
+    cursor: default;
+    opacity: 0.62;
+}
+
+.bookmarks-discovery-item input {
+    margin-top: 0.2rem;
+}
+
+.bookmarks-discovery-details {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.bookmarks-discovery-details code,
+.bookmarks-discovery-details span {
+    overflow-wrap: anywhere;
+}
+
+.bookmarks-discovery-details span {
+    font-size: 0.8rem;
+    opacity: 0.72;
+}
+
+.bookmarks-discovery-status {
+    white-space: nowrap;
+    font-size: 0.75rem;
+    font-weight: 600;
+    opacity: 0.75;
+}
+
+.bookmarks-discovery-empty {
+    padding: 2rem 1rem;
+    text-align: center;
+    opacity: 0.72;
+}
+
+@media (max-width: 720px) {
+    #cockpit-bookmarks-service-discovery {
+        right: 1rem;
+        bottom: 1rem;
+    }
+
+    .bookmarks-discovery-toolbar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .bookmarks-discovery-toolbar > div {
+        justify-content: flex-start;
+    }
+
+    .bookmarks-discovery-item {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .bookmarks-discovery-status {
+        grid-column: 2;
+    }
+}
