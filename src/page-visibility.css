@@ -1,7 +1,5 @@
-.bookmarks-hidden-header-edit {
-    display: flex;
+.bookmarks-header-no-heading {
     justify-content: flex-end;
-    margin-bottom: 1rem;
 }
 
 .bookmarks-visibility-options {
