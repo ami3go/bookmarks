@@ -76,6 +76,7 @@ export const Application = () => {
     const [settingsError, setSettingsError] = useState('');
     const [importCandidate, setImportCandidate] = useState(null);
     const [historyOpen, setHistoryOpen] = useState(false);
+    const [discoveryOpen, setDiscoveryOpen] = useState(false);
     const [dragSource, setDragSource] = useState(null);
     const [collapsedGroups, setCollapsedGroups] = useState(loadCollapsedGroups);
     const fileInputRef = useRef(null);
@@ -119,7 +120,7 @@ export const Application = () => {
     }, [editMode]);
 
     useEffect(() => {
-        if (!editMode || editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen)
+        if (!editMode || editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen)
             return undefined;
 
         let timer;
@@ -137,7 +138,7 @@ export const Application = () => {
             window.removeEventListener('pointerdown', resetTimer);
             window.removeEventListener('keydown', resetTimer);
         };
-    }, [editMode, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen]);
+    }, [editMode, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen]);
 
     useEffect(() => {
         try {
@@ -148,7 +149,7 @@ export const Application = () => {
     }, [collapsedGroups]);
 
     useEffect(() => {
-        const managementOpen = Boolean(editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen);
+        const managementOpen = Boolean(editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen);
         const handleKeyboard = event => {
             if (managementOpen)
                 return;
@@ -194,7 +195,7 @@ export const Application = () => {
 
         document.addEventListener('keydown', handleKeyboard);
         return () => document.removeEventListener('keydown', handleKeyboard);
-    }, [query, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen]);
+    }, [query, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen]);
 
     const groups = useMemo(
         () => normalizeGroupOrder(config.services, config.groupOrder),
@@ -816,7 +817,10 @@ export const Application = () => {
                 restoreHistory={restoreHistory}
             />
 
-            <ServiceDiscovery visible={editMode && canEdit === true} />
+            <ServiceDiscovery
+                visible={editMode && canEdit === true}
+                onOpenChange={setDiscoveryOpen}
+            />
         </Page>
     );
 };
