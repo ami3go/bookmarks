@@ -1,0 +1,18 @@
+Package: cockpit-bookmarks
+Version: @VERSION@
+Section: admin
+Priority: optional
+Architecture: all
+Maintainer: Aleksandr Chasnyk <69671996+ami3go@users.noreply.github.com>
+Depends: cockpit
+Recommends: iproute2
+Installed-Size: @INSTALLED_SIZE@
+Homepage: https://github.com/ami3go/bookmarks
+Description: lightweight Cockpit bookmarks page for local services
+ Cockpit Bookmarks provides a static Cockpit page for organizing and opening
+ services hosted on the same machine. It supports grouped bookmarks, search,
+ favorites, edit-mode management, JSON configuration, history, and optional
+ host-local service discovery.
+ .
+ The runtime package contains only prebuilt static assets. Node.js and npm are
+ not required on the target machine.

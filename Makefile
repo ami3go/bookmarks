@@ -4,13 +4,15 @@ CONFIG_DIR ?= /etc/cockpit
 CONFIG_FILE := $(CONFIG_DIR)/cockpit-bookmarks.json
 LEGACY_CONFIG_FILE := $(CONFIG_DIR)/local-services.json
 VERSION := $(shell sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)
+DEB_REVISION ?= 1
 RELEASE_DIR := release
 RELEASE_NAME := $(PACKAGE_NAME)-$(VERSION)
 RELEASE_ARCHIVE := $(RELEASE_DIR)/$(RELEASE_NAME).tar.gz
+RELEASE_DEB := $(RELEASE_DIR)/$(PACKAGE_NAME)_$(VERSION)-$(DEB_REVISION)_all.deb
 SRC_FILES := $(shell find src -type f -print)
 SRC_DIRS := $(shell find src -type d -print)
 
-.PHONY: all dist watch install install-prebuilt install-config devel-install devel-uninstall uninstall clean release
+.PHONY: all dist watch install install-prebuilt install-config devel-install devel-uninstall uninstall clean release deb deb-prebuilt release-all
 
 all: dist
 
@@ -60,11 +62,24 @@ release: clean
 	NODE_ENV=production $(MAKE) dist
 	rm -rf "$(RELEASE_DIR)/$(RELEASE_NAME)"
 	mkdir -p "$(RELEASE_DIR)/$(RELEASE_NAME)"
-	cp -r dist examples "$(RELEASE_DIR)/$(RELEASE_NAME)/"
+	cp -r dist examples packaging "$(RELEASE_DIR)/$(RELEASE_NAME)/"
 	cp Makefile package.json README.md ROADMAP.md CHANGELOG.md SECURITY.md LICENSE "$(RELEASE_DIR)/$(RELEASE_NAME)/"
 	tar -C "$(RELEASE_DIR)" -czf "$(RELEASE_ARCHIVE)" "$(RELEASE_NAME)"
 	rm -rf "$(RELEASE_DIR)/$(RELEASE_NAME)"
 	@echo "Created $(RELEASE_ARCHIVE)"
+
+deb:
+	$(MAKE) clean
+	NODE_ENV=production $(MAKE) dist
+	$(MAKE) deb-prebuilt
+
+deb-prebuilt:
+	DEB_REVISION="$(DEB_REVISION)" RELEASE_DIR="$(RELEASE_DIR)" sh packaging/build-deb.sh
+	@test -s "$(RELEASE_DEB)"
+
+release-all:
+	$(MAKE) release
+	$(MAKE) deb-prebuilt
 
 clean:
 	rm -rf dist release

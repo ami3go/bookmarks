@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+
+ROOT="${COCKPIT_BOOKMARKS_ROOT:-}"
+CONFIG_FILE="${ROOT}/etc/cockpit/cockpit-bookmarks.json"
+
+case "${1:-}" in
+    purge)
+        if [ -f "$CONFIG_FILE" ]; then
+            unlink "$CONFIG_FILE"
+        fi
+        ;;
+esac
+
+exit 0

@@ -74,7 +74,7 @@ HTTP/HTTPS detection is intentionally conservative. Unknown protocols are not se
 
 - edit page title, subtitle, and eyebrow text
 - optionally hide the eyebrow
-- optionally hide the full header, title, or search bar
+- independently show/hide header text, title, or search bar
 - standard / compact display density
 - explicit `groupOrder`
 - live reload when `/etc/cockpit/cockpit-bookmarks.json` changes externally
@@ -98,7 +98,7 @@ Required for every installation:
 - administrator or `sudo` access for a system-wide install and initial configuration
 - a modern browser for the Cockpit web interface
 
-For **prebuilt releases**, Node.js and npm are **not required** on the target server.
+For **prebuilt releases and Debian packages**, Node.js and npm are **not required** on the target server.
 
 For a **source build**, install:
 
@@ -106,11 +106,42 @@ For a **source build**, install:
 - npm
 - GNU Make
 
-The optional **Discover services** feature also requires the `ss` command, normally provided by the `iproute2` package.
+The optional **Discover services** feature also requires the `ss` command, normally provided by the `iproute2` package. The Debian package recommends `iproute2` automatically.
 
-### Recommended: install a prebuilt release
+### Recommended on Debian/Ubuntu: install the `.deb` package
 
-This is the recommended installation method for a mini PC or server because the release archive already contains the compiled `dist/` files.
+Download these files from the matching GitHub release:
+
+- `cockpit-bookmarks_<version>-<revision>_all.deb`
+- `cockpit-bookmarks_<version>-<revision>_all.deb.sha256`
+
+For v0.5.0 the first Debian packaging revision is `cockpit-bookmarks_0.5.0-1_all.deb`.
+
+Optionally calculate the checksum and compare it with the value in the `.sha256` file:
+
+```bash
+sha256sum cockpit-bookmarks_<version>-<revision>_all.deb
+```
+
+Install with `apt` so package dependencies are resolved automatically:
+
+```bash
+sudo apt install ./cockpit-bookmarks_<version>-<revision>_all.deb
+```
+
+The Debian package:
+
+- installs the Cockpit files under `/usr/share/cockpit/cockpit-bookmarks/`
+- creates `/etc/cockpit/cockpit-bookmarks.json` only when it does not already exist
+- migrates `/etc/cockpit/local-services.json` when the old file exists and the new config does not
+- preserves the JSON configuration across upgrades, reinstalls, and normal package removal
+- requires no Node.js or npm at runtime or install time
+
+Reload the Cockpit web interface after installation. **Bookmarks** should appear under **Tools**. If the page was already open, sign out and back in if a normal browser refresh does not show it.
+
+### Alternative: install a prebuilt release tarball
+
+This method is useful on non-Debian distributions or when you prefer the Makefile installer. The release archive already contains the compiled `dist/` files.
 
 1. Download these files from the matching GitHub release:
 
@@ -182,7 +213,17 @@ make devel-uninstall
 
 ### Update an existing installation
 
-#### Update from a prebuilt release
+#### Update a Debian/Ubuntu package
+
+Download the newer `.deb` and install it with `apt`:
+
+```bash
+sudo apt install ./cockpit-bookmarks_<new-version>-<revision>_all.deb
+```
+
+The package files are upgraded while `/etc/cockpit/cockpit-bookmarks.json` is preserved.
+
+#### Update from a prebuilt release tarball
 
 Download and extract the newer release, then run:
 
@@ -210,23 +251,41 @@ There is normally no need to run `install-config` during an update because the e
 
 ### Installation paths
 
-System-wide package files are installed at:
+The Debian package installs Cockpit files at:
+
+```text
+/usr/share/cockpit/cockpit-bookmarks/
+```
+
+The Makefile system installer uses:
 
 ```text
 /usr/local/share/cockpit/cockpit-bookmarks/
 ```
 
-The shared configuration is stored at:
+Both installation methods use the shared configuration:
 
 ```text
 /etc/cockpit/cockpit-bookmarks.json
 ```
 
-The runtime consists only of the compiled static Cockpit package plus this JSON configuration. Node.js, npm, source files, tests, and `node_modules/` are not required after a prebuilt installation.
+The runtime consists only of the compiled static Cockpit package plus this JSON configuration. Node.js, npm, source files, tests, and `node_modules/` are not required after a Debian or prebuilt installation.
 
 ### Uninstall
 
-From an extracted release or source checkout:
+For a Debian/Ubuntu installation, remove the package while keeping the bookmarks configuration with:
+
+```bash
+sudo apt remove cockpit-bookmarks
+```
+
+To remove both the package and `/etc/cockpit/cockpit-bookmarks.json`:
+
+```bash
+sudo apt purge cockpit-bookmarks
+```
+
+For a Makefile installation, from an extracted release or source checkout run:
 
 ```bash
 sudo make uninstall
@@ -234,7 +293,7 @@ sudo make uninstall
 
 This removes the Cockpit package but deliberately **keeps the configuration file** so bookmarks are not lost.
 
-To remove the configuration as well, back it up first if needed and delete it explicitly:
+To remove the configuration from a Makefile installation as well, back it up first if needed and delete it explicitly:
 
 ```bash
 sudo cp /etc/cockpit/cockpit-bookmarks.json ~/cockpit-bookmarks-backup.json
@@ -243,7 +302,13 @@ sudo rm /etc/cockpit/cockpit-bookmarks.json
 
 ### Reinstall or repair
 
-Reinstalling the package does not overwrite an existing configuration:
+For a Debian/Ubuntu installation:
+
+```bash
+sudo apt install --reinstall ./cockpit-bookmarks_<version>-<revision>_all.deb
+```
+
+For a prebuilt tarball, reinstalling does not overwrite an existing configuration:
 
 ```bash
 sudo make install-prebuilt install-config
@@ -269,21 +334,38 @@ NODE_ENV=production make clean all
 
 The build produces the compiled Cockpit package in `dist/`.
 
-## Create a release archive
+## Create release artifacts
+
+Build the production tarball and Debian package together with:
 
 ```bash
 npm ci
 npm test
-make release
+make release-all
 ```
 
 This produces:
 
 ```text
 release/cockpit-bookmarks-<version>.tar.gz
+release/cockpit-bookmarks_<version>-1_all.deb
 ```
 
-The archive includes the compiled Cockpit package, example configuration, installer Makefile, README, roadmap, changelog, security policy, and license.
+The archive includes the compiled Cockpit package, example configuration, Debian packaging definitions, installer Makefile, README, roadmap, changelog, security policy, and license.
+
+Build only the Debian package from a source checkout with:
+
+```bash
+make deb
+```
+
+An extracted prebuilt release tarball can rebuild the `.deb` without Node.js:
+
+```bash
+make deb-prebuilt
+```
+
+`dpkg-deb` is required on the machine doing the Debian package build.
 
 ## Continuous integration
 
@@ -297,13 +379,16 @@ GitHub Actions runs on pull requests and pushes to `main`. CI performs:
 6. release-file and tarball-content validation
 7. Node-free prebuilt installation test
 8. uninstall/reinstall and configuration-preservation checks
-9. artifact upload
+9. Debian package metadata and file-layout validation
+10. Debian config creation, preservation, legacy migration, remove, and purge tests
+11. Node-free `.deb` reconstruction from the prebuilt release tarball
+12. artifact upload
 
 ## Edit mode
 
 The pencil button controls Edit mode. While Edit mode is active, management actions become available, including Page settings, JSON import/export, History, group ordering, card actions, and service discovery.
 
-If the header is disabled, administrators still see a compact pencil control. Entering Edit mode temporarily reveals the header so Page settings remain reachable and the header can always be re-enabled.
+Header, title, and search visibility are independent. Group filtering, Add bookmark, and Edit mode controls remain available even when header/title content is hidden.
 
 Users without administrator privileges can browse and open bookmarks but cannot modify the system configuration.
 
@@ -311,11 +396,11 @@ Users without administrator privileges can browse and open bookmarks but cannot 
 
 Open **Edit mode → Page settings → Visible page elements** to control:
 
-- **Show header** — hides the complete top header in normal browse mode
-- **Show title** — hides only the main page title while leaving other enabled header content available
-- **Show search bar** — hides the bookmark text search while keeping the group filter available
+- **Show header** — shows/hides the eyebrow and subtitle header text
+- **Show title** — shows/hides only the main page title
+- **Show search bar** — shows/hides the bookmark text search while keeping the group filter available
 
-All three options default to enabled for existing configurations. When a hidden header or search bar would make a filter inaccessible, the application clears that hidden search/group filter when Edit mode closes so bookmarks are not left filtered by controls the user cannot see.
+All three options default to enabled for existing configurations and preview immediately while Page settings is open. **Save settings** persists the selected values. Hiding Search clears an active text query so bookmarks cannot remain filtered by an invisible search control; hiding Header or Title does not change the selected group filter.
 
 ## Bookmark fields
 
@@ -397,7 +482,14 @@ Collapsed group state is browser-local and is not written into the shared JSON c
 ```text
 cockpit-bookmarks/
 ├── .github/workflows/
-│   └── ci.yml
+│   ├── ci.yml
+│   └── release.yml
+├── packaging/
+│   ├── build-deb.sh
+│   └── debian/
+│       ├── control.in
+│       ├── postinst
+│       └── postrm
 ├── src/
 │   ├── app.jsx
 │   ├── app.css
@@ -421,6 +513,7 @@ cockpit-bookmarks/
 ├── tests/
 │   ├── bookmarks.test.mjs
 │   ├── cockpit-config.test.mjs
+│   ├── deb-package.sh
 │   └── discovery.test.mjs
 ├── examples/
 │   └── cockpit-bookmarks.json
