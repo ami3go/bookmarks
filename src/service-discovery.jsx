@@ -111,7 +111,7 @@ export function ServiceDiscovery({ visible = true }) {
                     ...current,
                     services: [...current.services, ...additions],
                 };
-            }, `Discovered ${selected.length} service${selected.length === 1 ? '' : 's'}`);
+            }, () => `Discovered ${addedCount} service${addedCount === 1 ? '' : 's'}`);
 
             if (addedCount === 0) {
                 setError('Those ports are already bookmarked. Run discovery again to refresh the list.');
