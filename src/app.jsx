@@ -40,6 +40,7 @@ import {
 } from './bookmarks.js';
 
 const COLLAPSED_GROUPS_KEY = 'cockpit-bookmarks:collapsed-groups';
+const FAVORITES_SECTION_KEY = 'favorites:pinned';
 
 function PencilIcon() {
     return (
@@ -64,7 +65,8 @@ function serviceSelectionKey(service) {
 
 function formatHistoryDate(value) {
     try {
-        return new Date(value).toLocaleString();
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? String(value || 'Unknown time') : date.toLocaleString();
     } catch (_) {
         return String(value || 'Unknown time');
     }
@@ -280,7 +282,10 @@ export const Application = () => {
 
     useEffect(() => {
         setCollapsedGroups(current => {
-            const available = new Set(hasFavorites ? ['Favorites', ...groups] : groups);
+            const available = new Set([
+                ...(hasFavorites ? [FAVORITES_SECTION_KEY] : []),
+                ...groups.map(group => `group:${group}`),
+            ]);
             const next = new Set([...current].filter(group => available.has(group)));
             if (next.size === current.size && [...next].every(group => current.has(group)))
                 return current;
@@ -325,9 +330,22 @@ export const Application = () => {
         [services]
     );
     const sections = useMemo(() => {
-        const normalSections = groupedServices.map(([name, items]) => ({ name, items, isFavorites: false }));
-        if (groupFilter === 'all' && favoriteServices.length > 0)
-            return [{ name: 'Favorites', items: favoriteServices, isFavorites: true }, ...normalSections];
+        const normalSections = groupedServices.map(([name, items]) => ({
+            sectionKey: `group:${name}`,
+            collapseKey: `group:${name}`,
+            name,
+            items,
+            isFavorites: false,
+        }));
+        if (groupFilter === 'all' && favoriteServices.length > 0) {
+            return [{
+                sectionKey: FAVORITES_SECTION_KEY,
+                collapseKey: FAVORITES_SECTION_KEY,
+                name: 'Favorites',
+                items: favoriteServices,
+                isFavorites: true,
+            }, ...normalSections];
+        }
         return normalSections;
     }, [favoriteServices, groupedServices, groupFilter]);
 
@@ -812,21 +830,22 @@ export const Application = () => {
                     </div>
                 ) : (
                     <div className="bookmark-groups">
-                        {sections.map(({ name: group, items: groupServices, isFavorites }) => {
-                            const isCollapsed = collapsedGroups.has(group) && !query.trim();
+                        {sections.map(({ sectionKey, collapseKey, name: group, items: groupServices, isFavorites }, sectionIndex) => {
+                            const headingId = `bookmark-group-heading-${sectionIndex}`;
+                            const isCollapsed = collapsedGroups.has(collapseKey) && !query.trim();
                             return (
-                                <section className={`bookmark-group-section${isFavorites ? ' is-favorites' : ''}`} key={group} aria-labelledby={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+                                <section className={`bookmark-group-section${isFavorites ? ' is-favorites' : ''}`} key={sectionKey} aria-labelledby={headingId}>
                                     <div className="bookmark-group-heading">
                                         <Button
                                             variant="plain"
                                             aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${group} group`}
                                             aria-expanded={!isCollapsed}
                                             title={isCollapsed ? 'Expand group' : 'Collapse group'}
-                                            onClick={() => toggleGroupCollapsed(group)}
+                                            onClick={() => toggleGroupCollapsed(collapseKey)}
                                         >
                                             <span aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
                                         </Button>
-                                        <h2 id={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>{group}</h2>
+                                        <h2 id={headingId}>{group}</h2>
                                         <span>{groupServices.length}</span>
                                         {editMode && canEdit === true && !isFavorites && groups.length > 1 && (
                                             <div
@@ -942,7 +961,7 @@ export const Application = () => {
                                                                         {service.icon || '↗'}
                                                                     </span>
                                                                     <span>{service.name || 'Unnamed service'}</span>
-                                                                    {service.favorite === true && <span aria-label="Favorite" title="Favorite">★</span>}
+                                                                    {service.favorite === true && <span aria-hidden="true" title="Favorite">★</span>}
                                                                 </div>
                                                                 {editMode && canEdit === true && (
                                                                     <div
