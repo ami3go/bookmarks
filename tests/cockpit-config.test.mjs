@@ -10,8 +10,10 @@ test('creates a fresh empty configuration without sharing arrays', () => {
     const first = emptyConfiguration();
     const second = emptyConfiguration();
 
+    assert.notEqual(first.groupOrder, second.groupOrder);
     assert.notEqual(first.services, second.services);
     assert.notEqual(first.history, second.history);
+    assert.deepEqual(first.groupOrder, []);
     assert.deepEqual(first.services, []);
     assert.deepEqual(first.history, []);
 });
