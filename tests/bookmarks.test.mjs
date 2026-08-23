@@ -10,6 +10,7 @@ import {
     duplicateWarnings,
     editableBookmark,
     expandUrl,
+    findBookmarkIndex,
     moveGroup,
     moveService,
     normalizeConfig,
@@ -138,6 +139,30 @@ test('updates favorite and group without mutating the source bookmark', () => {
     assert.equal(bookmarkWithGroup(source, 'Apps').group, 'Apps');
     assert.equal('group' in bookmarkWithGroup(source, 'Ungrouped'), false);
     assert.equal(source.group, 'Storage');
+});
+
+test('uses stable ids as authoritative mutation targets', () => {
+    const target = {
+        index: 0,
+        service: { id: 'missing-id', name: 'Same', url: 'http://same.test' },
+    };
+    const services = [
+        { id: 'other-id', name: 'Same', url: 'http://same.test' },
+    ];
+
+    assert.equal(findBookmarkIndex(services, target), -1);
+});
+
+test('keeps legacy field matching for bookmarks without ids', () => {
+    const target = {
+        index: 0,
+        service: { name: 'Legacy', url: 'http://legacy.test' },
+    };
+    const services = [
+        { name: 'Legacy', url: 'http://legacy.test' },
+    ];
+
+    assert.equal(findBookmarkIndex(services, target), 0);
 });
 
 test('validates required fields and URL protocol', () => {
