@@ -83,6 +83,177 @@ HTTP/HTTPS detection is intentionally conservative. Unknown protocols are not se
 - atomic JSON updates through Cockpit's `cockpit.file().modify()` API
 - existing v0.4 configurations and bookmarks without IDs remain compatible
 
+## Installation guide
+
+### Requirements
+
+Cockpit Bookmarks is designed to be installed on the same Linux host that runs Cockpit.
+
+Required for every installation:
+
+- Cockpit installed and working
+- administrator or `sudo` access for a system-wide install and initial configuration
+- a modern browser for the Cockpit web interface
+
+For **prebuilt releases**, Node.js and npm are **not required** on the target server.
+
+For a **source build**, install:
+
+- Node.js 18 or newer
+- npm
+- GNU Make
+
+The optional **Discover services** feature also requires the `ss` command, normally provided by the `iproute2` package.
+
+### Recommended: install a prebuilt release
+
+This is the recommended installation method for a mini PC or server because the release archive already contains the compiled `dist/` files.
+
+1. Download these files from the matching GitHub release:
+
+   - `cockpit-bookmarks-<version>.tar.gz`
+   - `cockpit-bookmarks-<version>.tar.gz.sha256`
+
+2. Optionally calculate the archive checksum and compare it with the value in the `.sha256` file:
+
+```bash
+sha256sum cockpit-bookmarks-<version>.tar.gz
+```
+
+3. Extract the release:
+
+```bash
+tar -xzf cockpit-bookmarks-<version>.tar.gz
+cd cockpit-bookmarks-<version>
+```
+
+4. Install the compiled Cockpit package and create the configuration if it does not already exist:
+
+```bash
+sudo make install-prebuilt install-config
+```
+
+5. Reload the Cockpit web interface. **Bookmarks** should appear under **Tools**. If the page was already open during installation, sign out and back in if a normal browser refresh does not show it.
+
+`install-config` is safe to run again. It keeps an existing `/etc/cockpit/cockpit-bookmarks.json` unchanged. If the old `/etc/cockpit/local-services.json` exists and the new configuration does not, the installer migrates the old file automatically.
+
+### Install from source
+
+Use this method when developing the project or installing directly from a source checkout.
+
+```bash
+npm ci
+npm test
+make
+sudo make install install-config
+```
+
+The build uses the committed `package-lock.json` and produces the compiled Cockpit package in `dist/` before installation.
+
+### Development install
+
+For development, build the application and symlink `dist/` into the current user's Cockpit package directory:
+
+```bash
+make devel-install
+sudo make install-config
+```
+
+After changing source files, rebuild with:
+
+```bash
+make
+```
+
+Or run the development watcher:
+
+```bash
+make watch
+```
+
+Remove the development symlink with:
+
+```bash
+make devel-uninstall
+```
+
+### Update an existing installation
+
+#### Update from a prebuilt release
+
+Download and extract the newer release, then run:
+
+```bash
+cd cockpit-bookmarks-<new-version>
+sudo make install-prebuilt install-config
+```
+
+The package files are replaced while the existing JSON configuration is preserved.
+
+#### Update a source installation
+
+From the source checkout:
+
+```bash
+git pull --ff-only
+npm ci
+npm test
+make clean
+make
+sudo make install
+```
+
+There is normally no need to run `install-config` during an update because the existing configuration remains in `/etc/cockpit/cockpit-bookmarks.json`.
+
+### Installation paths
+
+System-wide package files are installed at:
+
+```text
+/usr/local/share/cockpit/cockpit-bookmarks/
+```
+
+The shared configuration is stored at:
+
+```text
+/etc/cockpit/cockpit-bookmarks.json
+```
+
+The runtime consists only of the compiled static Cockpit package plus this JSON configuration. Node.js, npm, source files, tests, and `node_modules/` are not required after a prebuilt installation.
+
+### Uninstall
+
+From an extracted release or source checkout:
+
+```bash
+sudo make uninstall
+```
+
+This removes the Cockpit package but deliberately **keeps the configuration file** so bookmarks are not lost.
+
+To remove the configuration as well, back it up first if needed and delete it explicitly:
+
+```bash
+sudo cp /etc/cockpit/cockpit-bookmarks.json ~/cockpit-bookmarks-backup.json
+sudo rm /etc/cockpit/cockpit-bookmarks.json
+```
+
+### Reinstall or repair
+
+Reinstalling the package does not overwrite an existing configuration:
+
+```bash
+sudo make install-prebuilt install-config
+```
+
+For a source checkout use:
+
+```bash
+make clean
+make
+sudo make install install-config
+```
+
 ## Build from source
 
 Dependencies are locked in `package-lock.json` and installed reproducibly with npm:
@@ -94,51 +265,6 @@ NODE_ENV=production make clean all
 ```
 
 The build produces the compiled Cockpit package in `dist/`.
-
-## Development install
-
-```bash
-make devel-install
-sudo make install-config
-```
-
-Reload Cockpit. **Bookmarks** should appear under Tools.
-
-Remove the development symlink with:
-
-```bash
-make devel-uninstall
-```
-
-## System install from source
-
-```bash
-make
-sudo make install install-config
-```
-
-Installed package:
-
-```text
-/usr/local/share/cockpit/cockpit-bookmarks/
-```
-
-Configuration:
-
-```text
-/etc/cockpit/cockpit-bookmarks.json
-```
-
-## Install a prebuilt release
-
-Release archives contain the compiled `dist/` tree, so Node.js and npm are not required on the target server.
-
-```bash
-cd cockpit-bookmarks-<version>
-sudo make install-prebuilt install-config
-```
-
-`install-prebuilt` refuses to continue if the compiled `dist/` tree is missing. Reinstalling keeps an existing configuration unchanged, and uninstalling removes only the Cockpit package, not the JSON configuration.
 
 ## Create a release archive
 
