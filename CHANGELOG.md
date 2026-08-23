@@ -18,6 +18,7 @@ The project follows semantic versioning where practical.
 - Move to group action from the card menu.
 - Live configuration reload through Cockpit's file watch API.
 - Modal-local write errors for editor, move, delete, settings, import, and history actions.
+- Page visibility controls for the header, title, and search bar, configurable from Page settings in Edit mode.
 - Host-local **Discover services** workflow that inspects listening TCP sockets with `ss`, classifies likely web services, prevents obvious duplicate port additions, and presents a review dialog before writing bookmarks.
 - Discovery helper tests covering socket parsing, duplicate detection, safe defaults, ambiguous port handling, multi-process listener classification, and non-web listener exclusions.
 
@@ -33,10 +34,13 @@ The project follows semantic versioning where practical.
 - Stable bookmark IDs are authoritative mutation targets; if an externally changed bookmark ID disappears, edit/delete/move actions fail safely instead of falling back to a lookalike bookmark.
 - Package and lockfile version metadata are aligned to `0.5.0`.
 - Build watch mode refreshes copied static files such as `manifest.json`, and Makefile source dependency tracking now covers nested files/directories and additions/deletions.
+- When the header is hidden, administrators retain a compact Edit-mode control and the full header is temporarily shown while Edit mode is active so visibility settings can always be restored.
 
 ### Reliability and compatibility
 
-- Existing v0.4 JSON configurations continue to normalize without `displayMode`, `groupOrder`, `favorite`, or `openMode` fields.
+- Existing v0.4 JSON configurations continue to normalize without `displayMode`, `groupOrder`, `favorite`, `openMode`, `showHeader`, `showTitle`, or `showSearch` fields.
+- Visibility settings are included in import/export and History snapshots; legacy History snapshots restore page elements as visible.
+- Hidden header/search states clear inaccessible search/group filters when leaving Edit mode so no invisible filter remains active.
 - External JSON file changes refresh the displayed configuration without replacing unsaved modal draft fields.
 - Existing privileged `cockpit.file().modify()` writes and history conflict protection remain in place.
 - Service discovery does not scan the LAN and does not write anything until the administrator confirms selected candidates.
