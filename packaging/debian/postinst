@@ -1,0 +1,27 @@
+#!/bin/sh
+set -e
+
+ROOT="${COCKPIT_BOOKMARKS_ROOT:-}"
+CONFIG_DIR="${ROOT}/etc/cockpit"
+CONFIG_FILE="${CONFIG_DIR}/cockpit-bookmarks.json"
+LEGACY_CONFIG_FILE="${CONFIG_DIR}/local-services.json"
+DEFAULT_CONFIG="${ROOT}/usr/share/doc/cockpit-bookmarks/examples/cockpit-bookmarks.json"
+
+case "${1:-}" in
+    configure)
+        install -d -m 0755 "$CONFIG_DIR"
+        if [ ! -e "$CONFIG_FILE" ]; then
+            if [ -e "$LEGACY_CONFIG_FILE" ]; then
+                cp -p "$LEGACY_CONFIG_FILE" "$CONFIG_FILE"
+                echo "Migrated $LEGACY_CONFIG_FILE -> $CONFIG_FILE"
+            else
+                install -m 0644 "$DEFAULT_CONFIG" "$CONFIG_FILE"
+                echo "Created $CONFIG_FILE"
+            fi
+        else
+            echo "Keeping existing $CONFIG_FILE"
+        fi
+        ;;
+esac
+
+exit 0
