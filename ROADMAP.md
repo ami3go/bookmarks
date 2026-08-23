@@ -68,7 +68,7 @@ Status: feature implementation and repository-side hardening are complete on `v0
 - [x] Review admin-only write boundaries
 - [x] Review service-discovery failure/duplicate paths
 - [x] Expand pure helper coverage for new v0.5 behavior
-- [ ] Final CI on the release-candidate head
+- [x] Final CI on the release-candidate code head
 - [ ] Re-run administrator and non-administrator Cockpit smoke tests
 - [ ] Verify light/dark/auto themes and responsive layouts
 
