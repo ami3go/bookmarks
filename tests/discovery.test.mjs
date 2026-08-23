@@ -70,6 +70,18 @@ test('builds safe discovery defaults and excludes known non-web listeners', () =
     assert.equal(candidates[4].reason, 'Cockpit itself');
 });
 
+test('does not recommend generic port 9100 unless the process looks web-related', () => {
+    const candidates = buildDiscoveryCandidates([
+        { port: 9100, addresses: ['0.0.0.0'], processes: [], process: '', localOnly: false },
+        { port: 9100, addresses: ['0.0.0.0'], processes: ['node_exporter'], process: 'node_exporter', localOnly: false },
+    ], [], 'mini-pc.local');
+
+    assert.equal(candidates[0].likelyWeb, false);
+    assert.equal(candidates[0].selected, false);
+    assert.equal(candidates[1].likelyWeb, true);
+    assert.equal(candidates[1].selected, true);
+});
+
 test('marks already-bookmarked ports and leaves unknown protocols unselected', () => {
     const candidates = buildDiscoveryCandidates([
         { port: 3000, addresses: ['0.0.0.0'], processes: ['grafana-server'], process: 'grafana-server', localOnly: false },
