@@ -21,6 +21,7 @@ import {
     OPEN_MODES,
     allowedUrl,
     bookmarkWithFavorite,
+    duplicateBookmark,
     duplicateWarnings,
     editableBookmark,
     expandUrl,
@@ -468,6 +469,22 @@ export const Application = () => {
         `${nextFavorite ? 'Favorited' : 'Unfavorited'} ${service.name || 'bookmark'}`);
     };
 
+    const duplicateService = service => {
+        if (!editMode || canEdit !== true)
+            return;
+
+        const target = { index: service.sourceIndex, service: runtimeFreeService(service) };
+        modifyConfig(current => {
+            const index = findBookmarkIndex(current.services, target);
+            if (index === -1)
+                throw new Error('This bookmark was changed or removed. Reload the page and try again.');
+            const duplicate = duplicateBookmark(current.services[index], current.services);
+            const updatedServices = [...current.services];
+            updatedServices.splice(index + 1, 0, duplicate);
+            return { ...current, services: updatedServices };
+        }, 'Bookmark duplicated.', undefined, `Duplicated ${service.name || 'bookmark'}`);
+    };
+
     const openService = service => {
         if (service.openMode === 'same-tab')
             window.open(service.resolvedUrl, '_top');
@@ -903,6 +920,17 @@ export const Application = () => {
                                                                                     disabled={saving}
                                                                                 >
                                                                                     {service.favorite === true ? '★ Remove from Favorites' : '☆ Add to Favorites'}
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="bookmark-action-menu-item"
+                                                                                    onClick={event => {
+                                                                                        closeActionMenu(event);
+                                                                                        duplicateService(service);
+                                                                                    }}
+                                                                                    disabled={saving}
+                                                                                >
+                                                                                    Duplicate
                                                                                 </button>
                                                                                 <button
                                                                                     type="button"
