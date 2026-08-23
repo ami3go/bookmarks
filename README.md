@@ -1,6 +1,6 @@
 # Cockpit Bookmarks
 
-A lightweight Cockpit extension for organizing links to web services hosted on a mini PC or server.
+A lightweight Cockpit extension for organizing and launching web services hosted on a mini PC or server.
 
 Cockpit Bookmarks stays small at runtime:
 
@@ -10,7 +10,7 @@ Cockpit Bookmarks stays small at runtime:
 - no Node.js process after installation
 - no Python runtime
 
-React, PatternFly, Node.js and esbuild are **build-time dependencies only**. The installed application is static HTML/CSS/JavaScript served by Cockpit.
+React, PatternFly, Node.js, and esbuild are build-time dependencies only. The installed application is static HTML/CSS/JavaScript served by Cockpit.
 
 ## Features
 
@@ -18,40 +18,70 @@ React, PatternFly, Node.js and esbuild are **build-time dependencies only**. The
 
 - Cockpit-style React + PatternFly 6 interface
 - follows Cockpit light/dark theme
+- standard or compact card density
 - responsive grouped card layout
-- whole card opens the service in a new browser tab
+- collapsible groups with browser-local collapse state
+- Favorites section for pinned bookmarks
 - search by name, description, group, URL, or tags
 - filter by group
-- `{host}` substitution for the mini PC hostname/IP address
+- keyboard shortcuts: `/` focuses search, arrow keys move between visible cards, `Enter` opens/selects, `Esc` clears search
+- per-bookmark open behavior: new tab or same tab
+- `{host}` substitution for the Cockpit host name/IP address
 
 ### Manage
 
 Administrators can manage bookmarks directly from Cockpit:
 
-- add bookmarks
-- edit bookmarks
+- add and edit bookmarks
 - delete with confirmation
-- pencil **Edit mode** keeps Edit/Delete/reorder controls locked by default
+- pencil **Edit mode** keeps management controls hidden by default
 - edit mode automatically locks after two minutes of inactivity
-- reorder bookmarks with drag-and-drop
-- accessible Move up / Move down controls as an alternative to dragging
-- group bookmarks into sections
-- choose from common emoji icons or enter a custom icon
+- compact floating three-dot card action menu
+- reorder bookmarks with drag-and-drop or Move up / Move down
+- explicitly reorder groups
+- move a bookmark to another group
+- duplicate bookmarks with a fresh ID and collision-free name
+- add/remove Favorites
+- choose emoji/text icons
 - add searchable tags
 - duplicate name and URL warnings
 - resolved `{host}` URL preview while editing
+- modal-local write errors when a save operation fails
+
+### Discover services
+
+While Edit mode is enabled, administrators can use **Discover services** to inspect TCP listeners on the Cockpit host.
+
+Discovery:
+
+- runs `ss -H -ltnp` through Cockpit's host bridge
+- scans only the local host; it does not scan the LAN
+- groups duplicate IPv4/IPv6 listeners by port
+- shows detected port, bind addresses, and process name when available
+- recognizes common web-service ports/processes
+- excludes known non-web/system listeners from automatic selection
+- excludes Cockpit itself when identifiable
+- marks loopback-only listeners because they may not be reachable from a remote browser
+- avoids auto-adding ports already represented by local bookmarks
+- shows a review dialog before writing anything
+- adds selected services in one privileged atomic config update and one history snapshot
+
+HTTP/HTTPS detection is intentionally conservative. Unknown protocols are not selected automatically, and unusual TLS ports may need manual correction after discovery.
 
 ### Page and configuration
 
 - edit page title, subtitle, and eyebrow text
 - optionally hide the eyebrow
+- standard / compact display density
+- explicit `groupOrder`
+- live reload when `/etc/cockpit/cockpit-bookmarks.json` changes externally
 - import JSON configuration with validation and confirmation
-- export the current configuration as JSON
+- export the complete current configuration as JSON
 - automatic configuration history before every change
 - restore one of the 10 most recent configuration snapshots
 - administrator-only privileged writes
 - atomic JSON updates through Cockpit's `cockpit.file().modify()` API
-- existing configurations and bookmarks without IDs remain compatible
+- existing v0.4 configurations and bookmarks without IDs remain compatible
 
 ## Build from source
 
@@ -63,29 +93,12 @@ npm test
 NODE_ENV=production make clean all
 ```
 
-`make` also installs dependencies with `npm ci` automatically when `node_modules` is missing or the lockfile changes.
-
-The build produces:
-
-```text
-dist/
-├── index.html
-├── index.css
-├── index.js
-└── manifest.json
-```
+The build produces the compiled Cockpit package in `dist/`.
 
 ## Development install
 
-Build and link the application into Cockpit for your current user:
-
 ```bash
 make devel-install
-```
-
-Create the example system configuration once:
-
-```bash
 sudo make install-config
 ```
 
@@ -99,20 +112,18 @@ make devel-uninstall
 
 ## System install from source
 
-Build and install the Cockpit package system-wide:
-
 ```bash
 make
 sudo make install install-config
 ```
 
-The application is installed at:
+Installed package:
 
 ```text
 /usr/local/share/cockpit/cockpit-bookmarks/
 ```
 
-The configuration is stored at:
+Configuration:
 
 ```text
 /etc/cockpit/cockpit-bookmarks.json
@@ -122,18 +133,14 @@ The configuration is stored at:
 
 Release archives contain the compiled `dist/` tree, so Node.js and npm are not required on the target server.
 
-After extracting `cockpit-bookmarks-<version>.tar.gz`:
-
 ```bash
 cd cockpit-bookmarks-<version>
 sudo make install-prebuilt install-config
 ```
 
-`install-prebuilt` refuses to continue if the compiled `dist/` tree is missing.
+`install-prebuilt` refuses to continue if the compiled `dist/` tree is missing. Reinstalling keeps an existing configuration unchanged, and uninstalling removes only the Cockpit package, not the JSON configuration.
 
 ## Create a release archive
-
-From a source checkout:
 
 ```bash
 npm ci
@@ -157,13 +164,13 @@ GitHub Actions runs on pull requests and pushes to `main`. CI performs:
 2. unit tests
 3. production release build
 4. release-file and tarball-content validation
-5. upload of the compiled `dist/` tree and release tarball as workflow artifacts
+5. Node-free prebuilt installation test
+6. uninstall/reinstall and configuration-preservation checks
+7. artifact upload
 
 ## Edit mode
 
-The pencil button in the top-right controls edit mode. Edit and Delete are visible but disabled until edit mode is enabled. Reorder, page settings, import/export, and configuration history controls appear while edit mode is active.
-
-Delete still requires confirmation. Edit mode automatically locks after two minutes of inactivity and pauses its timer while a management dialog is open.
+The pencil button controls Edit mode. While Edit mode is active, management actions become available, including Page settings, JSON import/export, History, group ordering, card actions, and service discovery.
 
 Users without administrator privileges can browse and open bookmarks but cannot modify the system configuration.
 
@@ -174,15 +181,17 @@ The editor supports:
 - `name` — required display name
 - `url` — required absolute `http://` or `https://` URL
 - `description` — optional secondary text
-- `group` — optional category; existing groups are suggested
+- `group` — optional category
 - `icon` — optional emoji or text icon
 - `tags` — optional searchable metadata stored as an array
+- `openMode` — optional `same-tab`; omitted/default means new tab
+- `favorite` — optional boolean used for the Favorites section
 
 New or edited bookmarks receive an internal `id` automatically. Existing entries without an `id` remain compatible.
 
 ## Manual configuration
 
-The JSON file remains human-readable and can still be edited manually:
+The JSON remains human-readable and may be edited manually:
 
 ```bash
 sudo nano /etc/cockpit/cockpit-bookmarks.json
@@ -196,6 +205,8 @@ Example:
   "subtitle": "Services hosted on this mini PC",
   "eyebrow": "Mini PC",
   "showEyebrow": true,
+  "displayMode": "compact",
+  "groupOrder": ["Apps", "Monitoring"],
   "services": [
     {
       "id": "grafana",
@@ -204,45 +215,57 @@ Example:
       "url": "http://{host}:3000",
       "icon": "📊",
       "group": "Monitoring",
-      "tags": ["dashboard", "metrics"]
+      "tags": ["dashboard", "metrics"],
+      "favorite": true
     }
   ]
 }
 ```
 
-`id`, `eyebrow`, `showEyebrow`, and `tags` are optional for manually created configurations. The application also maintains a top-level `history` array after the first UI change; it contains up to 10 previous configuration snapshots.
+`id`, `displayMode`, `groupOrder`, `eyebrow`, `showEyebrow`, `tags`, `favorite`, and `openMode` are optional for manually created configurations. The application also maintains a top-level `history` array after UI changes; it contains up to 10 previous configuration snapshots.
 
-`{host}` is replaced in the browser with the hostname or IP address used to open Cockpit. For example, when Cockpit is open at `https://192.168.1.50:9090`, `http://{host}:3000` becomes `http://192.168.1.50:3000`. IPv6 hosts are bracketed automatically.
+`{host}` is replaced in the browser with the hostname or IP address used to open Cockpit. IPv6 hosts are bracketed automatically. Only absolute `http://` and `https://` targets are accepted.
 
-Only absolute `http://` and `https://` targets are accepted.
+## Import, export, and live reload
 
-## Import and export
+**Export JSON** downloads the current normalized configuration, including history. **Import JSON** validates the replacement before writing it and stores the previous state in History.
 
-**Export JSON** downloads the complete current configuration, including history. **Import JSON** validates the file before replacing the active configuration. The current state is written into history before the import is committed.
+The application accepts configuration files up to 1 MiB.
 
-The application currently accepts configuration files up to 1 MiB.
+Cockpit's file watcher refreshes the dashboard when the JSON file changes externally. Open editor/settings dialogs keep their unsaved draft state; a later write still uses the atomic `modify()` flow and detects stale bookmark targets.
 
 ## Ordering and groups
 
-Bookmarks are rendered in group sections. Reordering is intentionally constrained to bookmarks within the same group so the visual result is predictable. Use either the drag handle or the keyboard-accessible Move up / Move down buttons while edit mode is active.
+Bookmark order and group order are independent:
 
-Group section order follows the first occurrence of each group in the configuration file.
+- bookmark drag-and-drop / Move up / Move down is constrained within a group
+- Move to group changes a bookmark's group explicitly
+- group heading ↑ / ↓ controls persist top-level `groupOrder`
+- newly introduced groups are appended predictably
+- stale group-order names are removed during normalization
+
+Collapsed group state is browser-local and is not written into the shared JSON configuration. Active search temporarily exposes matching cards even when their group is collapsed.
 
 ## Source layout
 
 ```text
 cockpit-bookmarks/
 ├── .github/workflows/
-│   └── ci.yml
 ├── src/
 │   ├── app.jsx
 │   ├── app.css
 │   ├── bookmarks.js
+│   ├── discovery.js
+│   ├── service-discovery.jsx
+│   ├── service-discovery.css
+│   ├── floating-action-menu.js
+│   ├── floating-action-menu.css
 │   ├── cockpit-dark-theme.js
 │   ├── index.jsx
 │   └── manifest.json
 ├── tests/
-│   └── bookmarks.test.mjs
+│   ├── bookmarks.test.mjs
+│   └── discovery.test.mjs
 ├── examples/
 │   └── cockpit-bookmarks.json
 ├── build.js
@@ -251,6 +274,7 @@ cockpit-bookmarks/
 ├── package-lock.json
 ├── CHANGELOG.md
 ├── SECURITY.md
+├── RELEASING.md
 ├── ROADMAP.md
 ├── LICENSE
 └── README.md
@@ -258,13 +282,17 @@ cockpit-bookmarks/
 
 ## Runtime footprint
 
-Node.js, npm, React source files, tests, and `node_modules/` are not required by the installed plugin. Cockpit serves the compiled files from `dist/`; React and PatternFly execute in the browser.
+Node.js, npm, React source files, tests, and `node_modules/` are not required by the installed plugin. Cockpit serves compiled files from `dist/`; React and PatternFly execute in the browser.
 
 ## Important limitations
 
-A bookmark cannot make a service listening only on `127.0.0.1` reachable from another computer. Such a service must listen on an appropriate LAN interface or be exposed through a reverse proxy.
+A bookmark cannot make a service listening only on `127.0.0.1` reachable from another computer. Such a service must listen on an appropriate interface or be exposed through a reverse proxy/tunnel.
 
-Service health checks are intentionally not part of the current release. Generic browser-side probes are unreliable across CORS policies, authentication, mixed-content rules, and self-signed TLS certificates.
+Service discovery detects TCP listeners, not application health. It does not probe the LAN, does not detect UDP-only services, and cannot reliably infer arbitrary HTTP-vs-HTTPS configurations.
+
+Generic service health checks remain intentionally deferred because browser-side probes are unreliable across CORS, authentication, mixed-content restrictions, and self-signed TLS certificates.
+
+Whole-card browsing currently uses application-controlled navigation rather than a literal `<a>` wrapper. Left-click and keyboard activation are supported, but native browser link affordances such as link-specific context menus/middle-click are not yet equivalent to a normal anchor. This has been reviewed for v0.5 and remains a documented follow-up rather than a release blocker.
 
 ## Security
 
