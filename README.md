@@ -162,11 +162,13 @@ GitHub Actions runs on pull requests and pushes to `main`. CI performs:
 
 1. `npm ci`
 2. unit tests
-3. production release build
-4. release-file and tarball-content validation
-5. Node-free prebuilt installation test
-6. uninstall/reinstall and configuration-preservation checks
-7. artifact upload
+3. recursive source dependency/rebuild regression checks
+4. development-watch static-file refresh regression check
+5. production release build
+6. release-file and tarball-content validation
+7. Node-free prebuilt installation test
+8. uninstall/reinstall and configuration-preservation checks
+9. artifact upload
 
 ## Edit mode
 
@@ -251,20 +253,28 @@ Collapsed group state is browser-local and is not written into the shared JSON c
 ```text
 cockpit-bookmarks/
 ├── .github/workflows/
+│   └── ci.yml
 ├── src/
 │   ├── app.jsx
 │   ├── app.css
+│   ├── bookmark-sections.jsx
+│   ├── bookmark-sections.css
+│   ├── bookmark-ui.js
 │   ├── bookmarks.js
+│   ├── cockpit-config.js
+│   ├── cockpit-dark-theme.js
 │   ├── discovery.js
-│   ├── service-discovery.jsx
-│   ├── service-discovery.css
 │   ├── floating-action-menu.js
 │   ├── floating-action-menu.css
-│   ├── cockpit-dark-theme.js
 │   ├── index.jsx
-│   └── manifest.json
+│   ├── management-dialogs.jsx
+│   ├── management-dialogs.css
+│   ├── manifest.json
+│   ├── service-discovery.jsx
+│   └── service-discovery.css
 ├── tests/
 │   ├── bookmarks.test.mjs
+│   ├── cockpit-config.test.mjs
 │   └── discovery.test.mjs
 ├── examples/
 │   └── cockpit-bookmarks.json
