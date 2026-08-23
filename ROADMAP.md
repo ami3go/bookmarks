@@ -1,8 +1,8 @@
 # Cockpit Bookmarks roadmap
 
-## v0.5.0 — density and organization
+## v0.5.0 — density, organization, and discovery
 
-Status: active development on `v0.5-development`. The released `v0.4.0` tag remains frozen.
+Status: feature implementation and repository-side hardening are complete on `v0.5-development`. The released `v0.4.0` tag remains frozen. Final real-host Cockpit smoke testing remains before v0.5 is considered release-ready.
 
 ### Phase 1 — display density
 
@@ -13,35 +13,71 @@ Status: active development on `v0.5-development`. The released `v0.4.0` tag rema
 - [x] Add unit coverage for display-mode normalization and history
 - [ ] Smoke-test compact mode in Cockpit on desktop and narrow layouts
 
-### Phase 2 — explicit group ordering
+### Phase 2 — organization
 
 - [x] Store optional top-level group order without changing bookmark group names
 - [x] Add Move group up / Move group down controls in edit mode
 - [x] Keep unknown/new groups predictable when no explicit order exists
 - [x] Preserve group order through import/export and history
-- [x] Add unit tests for group ordering
-- [ ] Smoke-test group ordering in Cockpit
+- [x] Add collapsible groups with browser-local state
+- [x] Add Favorites / pinned services
+- [x] Add Duplicate and Move to group actions
+- [x] Add unit tests for group ordering and bookmark metadata helpers
+- [ ] Smoke-test group ordering, collapse state, Favorites, Duplicate, and Move to group in Cockpit
 
-### Phase 3 — live configuration integration
+### Phase 3 — navigation and daily-use UX
 
-- [ ] Watch the Cockpit JSON file for external edits when practical
-- [ ] Refresh the UI safely after external configuration changes
-- [ ] Avoid overwriting unsaved modal input when a file change arrives
-- [ ] Surface external-file parse/read failures clearly
+- [x] Add `/` search focus shortcut
+- [x] Add arrow-key navigation across visible cards
+- [x] Keep Enter activation and Esc search clearing
+- [x] Add per-bookmark new-tab / same-tab behavior
+- [x] Review whole-card navigation semantics
+- [ ] Follow up on native anchor-equivalent middle-click/context-menu behavior in a later release if needed
 
-### Phase 4 — runtime and UX hardening
+### Phase 4 — live configuration integration
 
-- [ ] Improve modal-local write error feedback
-- [ ] Review whole-card navigation semantics for middle-click/Ctrl-click/right-click behavior
-- [ ] Expand automated runtime/integration coverage where Cockpit tooling allows
-- [ ] Re-run administrator and non-administrator smoke tests
+- [x] Watch the Cockpit JSON file for external edits
+- [x] Refresh the UI safely after external configuration changes
+- [x] Keep unsaved editor/settings/import draft state separate from watched configuration state
+- [x] Surface external-file parse/read failures clearly
+- [x] Improve modal-local write error feedback
+- [ ] Smoke-test external config editing while management dialogs are open
+
+### Phase 5 — service discovery
+
+- [x] Add administrator-only Discover services flow
+- [x] Inspect host-local listening TCP sockets with Cockpit `spawn()` + `ss`
+- [x] Avoid LAN/network-wide scanning
+- [x] Parse IPv4/IPv6 listeners into unique port candidates
+- [x] Capture process/bind information when available
+- [x] Mark loopback-only listeners
+- [x] Exclude known non-web/system listeners from automatic selection
+- [x] Exclude Cockpit itself when identifiable
+- [x] Detect already-bookmarked local ports
+- [x] Review candidates before any write
+- [x] Add selected discoveries in one privileged atomic write/history snapshot
+- [x] Add discovery parser/helper tests
+- [x] Harden ambiguous TCP 9100 behavior so generic printer listeners are not preselected as web
+- [ ] Smoke-test discovery against real services on the Cockpit host
+
+### Phase 6 — release quality
+
+- [x] Align package and lockfile version metadata to 0.5.0
+- [x] Update README, CHANGELOG, ROADMAP, and example configuration
+- [x] Review configuration compatibility and unknown-field preservation
+- [x] Review admin-only write boundaries
+- [x] Review service-discovery failure/duplicate paths
+- [x] Expand pure helper coverage for new v0.5 behavior
+- [ ] Final CI on the release-candidate head
+- [ ] Re-run administrator and non-administrator Cockpit smoke tests
 - [ ] Verify light/dark/auto themes and responsive layouts
 
-### Deferred by design
+## Deferred by design
 
 - Generic service health checks remain deferred because arbitrary browser-side checks are unreliable across CORS, authentication, mixed-content restrictions, and self-signed TLS.
 - Arbitrary uploaded image icons remain deferred because they require a secure file persistence/serving design beyond the lightweight JSON-only model.
 - Localization/i18n remains optional until the project has enough users/translations to justify the maintenance cost.
+- Native anchor-equivalent whole-card browser affordances remain a possible follow-up; current left-click/keyboard navigation remains supported.
 
 ## v0.4.0 — management release
 
@@ -69,10 +105,14 @@ Delivered:
 
 ### Bookmark reordering
 
-Bookmark drag-and-drop and Move up / Move down operate within a group. Moving a bookmark between groups is done by editing its Group field.
+Bookmark drag-and-drop and Move up / Move down operate within a group. Cross-group movement uses the explicit Move to group action.
 
 ### Configuration history
 
 History is stored in the same JSON configuration file and is capped at 10 snapshots. This preserves the no-database/no-daemon architecture but can increase configuration size for very large collections.
+
+### Discovery
+
+Discovery reports local TCP listeners only. It does not prove that a service is HTTP/HTTPS or healthy, and it does not detect UDP-only services. Protocol inference is deliberately conservative and always presented for review before bookmarks are written.
 
 See `RELEASING.md` for the release procedure.
