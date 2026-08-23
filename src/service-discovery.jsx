@@ -4,15 +4,8 @@ import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal/index.js';
 
-import {
-    CONFIG_PATH,
-    CONFIG_SYNTAX,
-    DEFAULT_CONFIG,
-    MAX_CONFIG_SIZE,
-    normalizeConfig,
-    storedBookmark,
-    withHistory,
-} from './bookmarks.js';
+import { storedBookmark } from './bookmarks.js';
+import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import {
     buildDiscoveryCandidates,
     existingLocalBookmarkPorts,
@@ -20,12 +13,6 @@ import {
 } from './discovery.js';
 
 const DISCOVERY_ROOT_ID = 'cockpit-bookmarks-service-discovery';
-
-function currentConfiguration(content) {
-    return content === null
-        ? { ...DEFAULT_CONFIG, services: [], history: [] }
-        : normalizeConfig(content);
-}
 
 function candidateStatus(candidate) {
     if (candidate.alreadyBookmarked)
@@ -39,8 +26,7 @@ function candidateStatus(candidate) {
     return 'Recommended';
 }
 
-function ServiceDiscoveryLauncher() {
-    const [editModeVisible, setEditModeVisible] = useState(false);
+export function ServiceDiscovery({ visible = true }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -54,17 +40,9 @@ function ServiceDiscoveryLauncher() {
     );
 
     useEffect(() => {
-        const update = () => setEditModeVisible(Boolean(document.querySelector('.bookmarks-management-bar')));
-        const observer = new MutationObserver(update);
-        observer.observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
-        update();
-        return () => observer.disconnect();
-    }, []);
-
-    useEffect(() => {
-        if (!editModeVisible && open && !saving)
+        if (!visible && open && !saving)
             setOpen(false);
-    }, [editModeVisible, open, saving]);
+    }, [visible, open, saving]);
 
     const discover = async () => {
         setOpen(true);
@@ -72,30 +50,22 @@ function ServiceDiscoveryLauncher() {
         setError('');
         setCandidates([]);
 
-        const file = window.cockpit.file(CONFIG_PATH, {
-            syntax: CONFIG_SYNTAX,
-            max_read_size: MAX_CONFIG_SIZE,
-        });
-
         try {
-            const [content, output] = await Promise.all([
-                file.read(),
+            const [config, output] = await Promise.all([
+                readConfiguration(),
                 window.cockpit.spawn(['ss', '-H', '-ltnp'], {
                     superuser: 'try',
                     err: 'message',
                 }),
             ]);
-            const config = currentConfiguration(content);
             const listeners = parseListeningSockets(output);
-            const discovered = buildDiscoveryCandidates(listeners, config.services, hostname);
-            setCandidates(discovered);
+            setCandidates(buildDiscoveryCandidates(listeners, config.services, hostname));
             if (listeners.length === 0)
                 setError('No listening TCP services were detected.');
         } catch (discoveryError) {
             const message = window.cockpit.message(discoveryError);
             setError(`Could not inspect listening TCP ports. Service discovery requires the ss command from iproute2. ${message}`);
         } finally {
-            file.close();
             setLoading(false);
         }
     };
@@ -127,16 +97,10 @@ function ServiceDiscoveryLauncher() {
 
         setSaving(true);
         setError('');
-        const file = window.cockpit.file(CONFIG_PATH, {
-            syntax: CONFIG_SYNTAX,
-            max_read_size: MAX_CONFIG_SIZE,
-            superuser: 'require',
-        });
         let addedCount = 0;
 
         try {
-            await file.modify(oldContent => {
-                const current = currentConfiguration(oldContent);
+            await modifyConfiguration(current => {
                 const existingPorts = existingLocalBookmarkPorts(current.services, hostname);
                 const additions = selected
                     .filter(candidate => !existingPorts.has(candidate.port))
@@ -146,11 +110,11 @@ function ServiceDiscoveryLauncher() {
                 if (additions.length === 0)
                     return current;
 
-                return withHistory(current, {
+                return {
                     ...current,
                     services: [...current.services, ...additions],
-                }, `Discovered ${additions.length} service${additions.length === 1 ? '' : 's'}`);
-            });
+                };
+            }, `Discovered ${selected.length} service${selected.length === 1 ? '' : 's'}`);
 
             if (addedCount === 0) {
                 setError('Those ports are already bookmarked. Run discovery again to refresh the list.');
@@ -162,12 +126,11 @@ function ServiceDiscoveryLauncher() {
         } catch (writeError) {
             setError(`Could not add discovered services: ${window.cockpit.message(writeError)}`);
         } finally {
-            file.close();
             setSaving(false);
         }
     };
 
-    if (!editModeVisible)
+    if (!visible)
         return null;
 
     return (
@@ -262,5 +225,5 @@ export function installServiceDiscovery() {
     host = document.createElement('div');
     host.id = DISCOVERY_ROOT_ID;
     document.body.appendChild(host);
-    createRoot(host).render(<ServiceDiscoveryLauncher />);
+    createRoot(host).render(<ServiceDiscovery />);
 }
