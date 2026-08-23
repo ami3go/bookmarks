@@ -208,11 +208,8 @@ export function sameLegacyBookmark(left, right) {
 }
 
 export function findBookmarkIndex(services, target) {
-    if (target?.service?.id) {
-        const byId = services.findIndex(service => service.id === target.service.id);
-        if (byId !== -1)
-            return byId;
-    }
+    if (target?.service?.id)
+        return services.findIndex(service => service.id === target.service.id);
 
     if (Number.isInteger(target?.index) && target.index >= 0 && target.index < services.length &&
         sameLegacyBookmark(services[target.index], target.service))
