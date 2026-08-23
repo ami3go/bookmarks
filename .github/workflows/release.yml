@@ -2,6 +2,7 @@ name: Release
 
 on:
   workflow_dispatch:
+  # Workflow changes merged to main deliberately exercise the full release path.
   push:
     branches:
       - main
