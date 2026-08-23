@@ -99,6 +99,7 @@ export const Application = () => {
     const [editor, setEditor] = useState(null);
     const [draft, setDraft] = useState(EMPTY_BOOKMARK);
     const [formErrors, setFormErrors] = useState({});
+    const [writeErrors, setWriteErrors] = useState({});
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [moveTarget, setMoveTarget] = useState(null);
     const [moveGroupDraft, setMoveGroupDraft] = useState('Ungrouped');
@@ -338,13 +339,26 @@ export const Application = () => {
     const resolvedPreview = draft.url.trim() ? expandUrl(draft.url.trim(), hostname) : '';
     const compactMode = config.displayMode === 'compact';
 
-    const modifyConfig = (transform, successText, onSuccess, action = successText) => {
+    const clearWriteError = area => {
+        if (!area)
+            return;
+        setWriteErrors(current => {
+            if (!current[area])
+                return current;
+            const next = { ...current };
+            delete next[area];
+            return next;
+        });
+    };
+
+    const modifyConfig = (transform, successText, onSuccess, action = successText, errorArea = null) => {
         const file = window.cockpit.file(CONFIG_PATH, {
             syntax: CONFIG_SYNTAX,
             max_read_size: MAX_CONFIG_SIZE,
             superuser: 'require',
         });
 
+        clearWriteError(errorArea);
         setSaving(true);
         setNotice(null);
 
@@ -365,16 +379,17 @@ export const Application = () => {
             .catch(error => {
                 file.close();
                 setSaving(false);
-                setNotice({
-                    variant: 'danger',
-                    text: `Could not update ${CONFIG_PATH}: ${window.cockpit.message(error)}`,
-                });
+                const text = `Could not update ${CONFIG_PATH}: ${window.cockpit.message(error)}`;
+                setNotice({ variant: 'danger', text });
+                if (errorArea)
+                    setWriteErrors(current => ({ ...current, [errorArea]: text }));
             });
     };
 
     const openAdd = () => {
         if (canEdit !== true)
             return;
+        clearWriteError('editor');
         setDraft({ ...EMPTY_BOOKMARK });
         setFormErrors({});
         setEditor({ mode: 'add' });
@@ -384,6 +399,7 @@ export const Application = () => {
         if (!editMode || canEdit !== true)
             return;
 
+        clearWriteError('editor');
         setSelectedBookmark(serviceSelectionKey(service));
         const storedService = runtimeFreeService(service);
         setDraft(editableBookmark(storedService));
@@ -402,6 +418,7 @@ export const Application = () => {
     };
 
     const updateDraft = (field, value) => {
+        clearWriteError('editor');
         setDraft(current => ({ ...current, [field]: value }));
         setFormErrors(current => ({ ...current, [field]: undefined }));
     };
@@ -417,7 +434,7 @@ export const Application = () => {
             modifyConfig(current => ({
                 ...current,
                 services: [...current.services, storedBookmark(draft)],
-            }), 'Bookmark added.', () => setEditor(null), `Added ${draft.name.trim()}`);
+            }), 'Bookmark added.', () => setEditor(null), `Added ${draft.name.trim()}`, 'editor');
             return;
         }
 
@@ -435,13 +452,14 @@ export const Application = () => {
         }, 'Bookmark updated.', () => {
             setEditor(null);
             setSelectedBookmark(null);
-        }, `Edited ${draft.name.trim()}`);
+        }, `Edited ${draft.name.trim()}`, 'editor');
     };
 
     const requestDelete = service => {
         if (!editMode || canEdit !== true)
             return;
 
+        clearWriteError('delete');
         setSelectedBookmark(serviceSelectionKey(service));
         setDeleteTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
     };
@@ -459,12 +477,13 @@ export const Application = () => {
         }, 'Bookmark deleted.', () => {
             setDeleteTarget(null);
             setSelectedBookmark(null);
-        }, `Deleted ${deleteTarget?.service?.name || 'bookmark'}`);
+        }, `Deleted ${deleteTarget?.service?.name || 'bookmark'}`, 'delete');
     };
 
     const openMoveToGroup = service => {
         if (!editMode || canEdit !== true)
             return;
+        clearWriteError('move');
         setSelectedBookmark(serviceSelectionKey(service));
         setMoveTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
         setMoveGroupDraft(serviceGroup(service));
@@ -485,7 +504,7 @@ export const Application = () => {
         }, `Bookmark moved to ${destination}.`, () => {
             setMoveTarget(null);
             setSelectedBookmark(null);
-        }, `Moved ${moveTarget.service.name || 'bookmark'} to ${destination}`);
+        }, `Moved ${moveTarget.service.name || 'bookmark'} to ${destination}`, 'move');
     };
 
     const toggleFavorite = service => {
@@ -603,6 +622,7 @@ export const Application = () => {
     const openSettings = () => {
         if (!editMode)
             return;
+        clearWriteError('settings');
         setSettingsDraft({
             title: config.title,
             subtitle: config.subtitle,
@@ -628,7 +648,7 @@ export const Application = () => {
             eyebrow: settingsDraft.eyebrow.trim(),
             showEyebrow: settingsDraft.showEyebrow,
             displayMode: settingsDraft.displayMode,
-        }), 'Page settings updated.', () => setSettingsOpen(false), 'Updated page settings');
+        }), 'Page settings updated.', () => setSettingsOpen(false), 'Updated page settings', 'settings');
     };
 
     const exportConfig = () => {
@@ -656,6 +676,7 @@ export const Application = () => {
 
         try {
             const parsed = JSON.parse(await file.text());
+            clearWriteError('import');
             setImportCandidate(normalizeImportedConfig(parsed, hostname));
         } catch (error) {
             setNotice({ variant: 'danger', text: `Could not import JSON: ${error.message}` });
@@ -674,7 +695,12 @@ export const Application = () => {
             setQuery('');
             setGroupFilter('all');
             setSelectedBookmark(null);
-        }, 'Imported configuration');
+        }, 'Imported configuration', 'import');
+    };
+
+    const openHistory = () => {
+        clearWriteError('history');
+        setHistoryOpen(true);
     };
 
     const restoreHistory = entry => {
@@ -683,7 +709,7 @@ export const Application = () => {
         modifyConfig(current => restoreHistoryEntry(current, entry), 'Configuration restored.', () => {
             setHistoryOpen(false);
             setSelectedBookmark(null);
-        }, 'Restored history snapshot');
+        }, 'Restored history snapshot', 'history');
     };
 
     const clearFilters = () => {
@@ -750,7 +776,7 @@ export const Application = () => {
                             <Button variant="secondary" onClick={openSettings}>Page settings</Button>
                             <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Import JSON</Button>
                             <Button variant="secondary" onClick={exportConfig}>Export JSON</Button>
-                            <Button variant="secondary" onClick={() => setHistoryOpen(true)}>
+                            <Button variant="secondary" onClick={openHistory}>
                                 History ({config.history.length})
                             </Button>
                         </div>
@@ -1060,6 +1086,7 @@ export const Application = () => {
             <Modal isOpen={editor !== null} onClose={closeEditor} variant="medium">
                 <ModalHeader title={editor?.mode === 'edit' ? 'Edit bookmark' : 'Add bookmark'} />
                 <ModalBody>
+                    {writeErrors.editor && <Alert isInline variant="danger" title={writeErrors.editor} />}
                     <Form id="bookmark-editor-form" onSubmit={submitEditor}>
                         {warnings.length > 0 && (
                             <Alert isInline variant="warning" title="Possible duplicate">
@@ -1173,12 +1200,16 @@ export const Application = () => {
             <Modal isOpen={moveTarget !== null} onClose={() => !saving && setMoveTarget(null)} variant="small">
                 <ModalHeader title="Move bookmark to group" />
                 <ModalBody>
+                    {writeErrors.move && <Alert isInline variant="danger" title={writeErrors.move} />}
                     {moveTarget && (
                         <FormGroup label={`Destination for ${moveTarget.service.name || 'bookmark'}`} fieldId="move-bookmark-group">
                             <select
                                 id="move-bookmark-group"
                                 value={moveGroupDraft}
-                                onChange={event => setMoveGroupDraft(event.target.value)}
+                                onChange={event => {
+                                    clearWriteError('move');
+                                    setMoveGroupDraft(event.target.value);
+                                }}
                                 style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
                             >
                                 {[...new Set(['Ungrouped', ...groups])].map(group => (
@@ -1203,6 +1234,7 @@ export const Application = () => {
             <Modal isOpen={deleteTarget !== null} onClose={() => !saving && setDeleteTarget(null)} variant="small">
                 <ModalHeader title="Delete bookmark?" titleIconVariant="danger" />
                 <ModalBody>
+                    {writeErrors.delete && <Alert isInline variant="danger" title={writeErrors.delete} />}
                     {deleteTarget && (
                         <p>
                             Delete <strong>{deleteTarget.service.name || 'this bookmark'}</strong>? This removes it from {CONFIG_PATH}.
@@ -1220,12 +1252,14 @@ export const Application = () => {
             <Modal isOpen={settingsOpen} onClose={() => !saving && setSettingsOpen(false)} variant="medium">
                 <ModalHeader title="Page settings" />
                 <ModalBody>
+                    {writeErrors.settings && <Alert isInline variant="danger" title={writeErrors.settings} />}
                     <Form id="bookmark-settings-form" onSubmit={submitSettings}>
                         <FormGroup label="Title" isRequired fieldId="settings-title">
                             <TextInput
                                 id="settings-title"
                                 value={settingsDraft.title}
                                 onChange={(_event, value) => {
+                                    clearWriteError('settings');
                                     setSettingsDraft(current => ({ ...current, title: value }));
                                     setSettingsError('');
                                 }}
@@ -1237,14 +1271,20 @@ export const Application = () => {
                             <TextInput
                                 id="settings-subtitle"
                                 value={settingsDraft.subtitle}
-                                onChange={(_event, value) => setSettingsDraft(current => ({ ...current, subtitle: value }))}
+                                onChange={(_event, value) => {
+                                    clearWriteError('settings');
+                                    setSettingsDraft(current => ({ ...current, subtitle: value }));
+                                }}
                             />
                         </FormGroup>
                         <FormGroup label="Eyebrow" fieldId="settings-eyebrow">
                             <TextInput
                                 id="settings-eyebrow"
                                 value={settingsDraft.eyebrow}
-                                onChange={(_event, value) => setSettingsDraft(current => ({ ...current, eyebrow: value }))}
+                                onChange={(_event, value) => {
+                                    clearWriteError('settings');
+                                    setSettingsDraft(current => ({ ...current, eyebrow: value }));
+                                }}
                                 isDisabled={!settingsDraft.showEyebrow}
                             />
                         </FormGroup>
@@ -1252,7 +1292,10 @@ export const Application = () => {
                             <input
                                 type="checkbox"
                                 checked={settingsDraft.showEyebrow}
-                                onChange={event => setSettingsDraft(current => ({ ...current, showEyebrow: event.target.checked }))}
+                                onChange={event => {
+                                    clearWriteError('settings');
+                                    setSettingsDraft(current => ({ ...current, showEyebrow: event.target.checked }));
+                                }}
                             />
                             <span>Show eyebrow above the page title</span>
                         </label>
@@ -1260,7 +1303,10 @@ export const Application = () => {
                             <select
                                 id="settings-display-mode"
                                 value={settingsDraft.displayMode}
-                                onChange={event => setSettingsDraft(current => ({ ...current, displayMode: event.target.value }))}
+                                onChange={event => {
+                                    clearWriteError('settings');
+                                    setSettingsDraft(current => ({ ...current, displayMode: event.target.value }));
+                                }}
                                 style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
                             >
                                 {DISPLAY_MODES.map(mode => (
@@ -1286,6 +1332,7 @@ export const Application = () => {
             <Modal isOpen={importCandidate !== null} onClose={() => !saving && setImportCandidate(null)} variant="small">
                 <ModalHeader title="Import configuration?" />
                 <ModalBody>
+                    {writeErrors.import && <Alert isInline variant="danger" title={writeErrors.import} />}
                     {importCandidate && (
                         <>
                             <p>
@@ -1306,6 +1353,7 @@ export const Application = () => {
             <Modal isOpen={historyOpen} onClose={() => !saving && setHistoryOpen(false)} variant="medium">
                 <ModalHeader title="Configuration history" />
                 <ModalBody>
+                    {writeErrors.history && <Alert isInline variant="danger" title={writeErrors.history} />}
                     {config.history.length === 0 ? (
                         <p>No history yet. A snapshot is saved automatically before each configuration change.</p>
                     ) : (
