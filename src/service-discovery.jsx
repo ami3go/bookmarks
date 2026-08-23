@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal/index.js';
@@ -11,8 +10,6 @@ import {
     existingLocalBookmarkPorts,
     parseListeningSockets,
 } from './discovery.js';
-
-const DISCOVERY_ROOT_ID = 'cockpit-bookmarks-service-discovery';
 
 function candidateStatus(candidate) {
     if (candidate.alreadyBookmarked)
@@ -134,7 +131,7 @@ export function ServiceDiscovery({ visible = true }) {
         return null;
 
     return (
-        <>
+        <div className="bookmarks-discovery-floating">
             <Button
                 className="bookmarks-discovery-launcher"
                 variant="secondary"
@@ -213,17 +210,6 @@ export function ServiceDiscovery({ visible = true }) {
                     <Button variant="link" onClick={() => setOpen(false)} isDisabled={saving}>Cancel</Button>
                 </ModalFooter>
             </Modal>
-        </>
+        </div>
     );
-}
-
-export function installServiceDiscovery() {
-    let host = document.getElementById(DISCOVERY_ROOT_ID);
-    if (host)
-        return;
-
-    host = document.createElement('div');
-    host.id = DISCOVERY_ROOT_ID;
-    document.body.appendChild(host);
-    createRoot(host).render(<ServiceDiscovery />);
 }
