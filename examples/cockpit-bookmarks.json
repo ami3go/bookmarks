@@ -3,6 +3,8 @@
   "subtitle": "Services hosted on this mini PC",
   "eyebrow": "Mini PC",
   "showEyebrow": true,
+  "displayMode": "compact",
+  "groupOrder": ["Apps", "Monitoring", "Discovered"],
   "services": [
     {
       "name": "Grafana",
@@ -10,7 +12,8 @@
       "url": "http://{host}:3000",
       "icon": "📊",
       "group": "Monitoring",
-      "tags": ["dashboard", "metrics"]
+      "tags": ["dashboard", "metrics"],
+      "favorite": true
     },
     {
       "name": "Example Service",
@@ -18,7 +21,16 @@
       "url": "http://{host}:8080",
       "icon": "🔗",
       "group": "Apps",
-      "tags": ["app"]
+      "tags": ["app"],
+      "openMode": "same-tab"
+    },
+    {
+      "name": "Discovered Example",
+      "description": "Example of metadata produced by host-local service discovery",
+      "url": "http://{host}:8000",
+      "icon": "🌐",
+      "group": "Discovered",
+      "tags": ["discovered", "port-8000"]
     }
   ]
 }

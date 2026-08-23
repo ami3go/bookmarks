@@ -30,6 +30,74 @@ jobs:
       - name: Run unit tests
         run: npm test
 
+      - name: Test recursive source rebuilds
+        shell: bash
+        run: |
+          set -euo pipefail
+          make clean
+          make dist
+          before=$(stat -c %Y dist/index.js)
+
+          sleep 1
+          mkdir -p src/__build-dependency-probe__
+          printf 'probe\n' > src/__build-dependency-probe__/probe.txt
+          make dist
+          after_add=$(stat -c %Y dist/index.js)
+          test "$after_add" -gt "$before"
+
+          sleep 1
+          rm src/__build-dependency-probe__/probe.txt
+          make dist
+          after_delete=$(stat -c %Y dist/index.js)
+          test "$after_delete" -gt "$after_add"
+          rmdir src/__build-dependency-probe__
+
+      - name: Test watch refreshes static files
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest_backup="$RUNNER_TEMP/cockpit-bookmarks-manifest.json"
+          watch_log="$RUNNER_TEMP/cockpit-bookmarks-watch.log"
+          cp src/manifest.json "$manifest_backup"
+          watch_pid=""
+
+          cleanup() {
+            if [ -n "$watch_pid" ]; then
+              kill -TERM "$watch_pid" 2>/dev/null || true
+              wait "$watch_pid" 2>/dev/null || true
+            fi
+            cp "$manifest_backup" src/manifest.json
+          }
+          trap cleanup EXIT
+
+          node build.js --watch >"$watch_log" 2>&1 &
+          watch_pid=$!
+
+          for _ in {1..100}; do
+            if grep -q 'Watching src/' "$watch_log"; then
+              break
+            fi
+            if ! kill -0 "$watch_pid" 2>/dev/null; then
+              cat "$watch_log"
+              exit 1
+            fi
+            sleep 0.1
+          done
+          grep -q 'Watching src/' "$watch_log"
+
+          printf '\n' >> src/manifest.json
+          for _ in {1..100}; do
+            if cmp -s src/manifest.json dist/manifest.json; then
+              break
+            fi
+            if ! kill -0 "$watch_pid" 2>/dev/null; then
+              cat "$watch_log"
+              exit 1
+            fi
+            sleep 0.1
+          done
+          cmp -s src/manifest.json dist/manifest.json
+
       - name: Build release archive
         run: make release
 

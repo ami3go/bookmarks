@@ -1,0 +1,37 @@
+.bookmark-group-order-actions {
+    display: flex;
+    gap: 0.15rem;
+    margin-left: auto;
+}
+
+.bookmarks-grid.is-compact {
+    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+    gap: 0.65rem;
+}
+
+.bookmark-card.is-compact .pf-v6-c-card__title {
+    padding: 0.65rem 0.75rem 0.35rem;
+}
+
+.bookmark-card.is-compact .pf-v6-c-card__body {
+    padding: 0 0.75rem 0.65rem;
+}
+
+.bookmark-card.is-compact .bookmark-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-right: 0.45rem;
+    font-size: 1rem;
+}
+
+.bookmark-card.is-compact .bookmark-description {
+    overflow: hidden;
+    font-size: 0.82rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bookmark-card.is-compact .bookmark-meta {
+    margin-top: 0.5rem;
+}

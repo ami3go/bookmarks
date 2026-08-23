@@ -2,12 +2,16 @@ export const CONFIG_PATH = '/etc/cockpit/cockpit-bookmarks.json';
 export const MAX_CONFIG_SIZE = 1048576;
 export const HISTORY_LIMIT = 10;
 export const EDIT_MODE_TIMEOUT_MS = 120000;
+export const DISPLAY_MODES = ['cards', 'compact'];
+export const OPEN_MODES = ['new-tab', 'same-tab'];
 
 export const DEFAULT_CONFIG = {
     title: 'Cockpit Bookmarks',
     subtitle: 'Services hosted on this mini PC',
     eyebrow: 'Mini PC',
     showEyebrow: true,
+    displayMode: 'cards',
+    groupOrder: [],
     services: [],
     history: [],
 };
@@ -19,6 +23,7 @@ export const EMPTY_BOOKMARK = {
     group: '',
     icon: '',
     tags: '',
+    openMode: 'new-tab',
 };
 
 export const ICON_PRESETS = ['🔗', '📊', '🖥️', '📦', '🗄️', '🌐', '🛠️', '📁', '🔒', '🎛️'];
@@ -50,6 +55,59 @@ export function allowedUrl(url) {
     }
 }
 
+export function normalizeDisplayMode(value) {
+    return DISPLAY_MODES.includes(value) ? value : DEFAULT_CONFIG.displayMode;
+}
+
+export function normalizeOpenMode(value) {
+    return OPEN_MODES.includes(value) ? value : 'new-tab';
+}
+
+export function serviceGroup(service) {
+    return String(service?.group || '').trim() || 'Ungrouped';
+}
+
+export function groupNames(services) {
+    return [...new Set(services.map(serviceGroup))];
+}
+
+export function normalizeGroupOrder(services, preferredOrder = []) {
+    const available = groupNames(services);
+    const availableSet = new Set(available);
+    const result = [];
+    const seen = new Set();
+
+    if (Array.isArray(preferredOrder)) {
+        for (const value of preferredOrder) {
+            const group = String(value || '').trim();
+            if (availableSet.has(group) && !seen.has(group)) {
+                result.push(group);
+                seen.add(group);
+            }
+        }
+    }
+
+    for (const group of available) {
+        if (!seen.has(group)) {
+            result.push(group);
+            seen.add(group);
+        }
+    }
+
+    return result;
+}
+
+export function moveGroup(groupOrder, group, direction) {
+    const order = [...groupOrder];
+    const index = order.indexOf(group);
+    const target = index + direction;
+    if (index === -1 || target < 0 || target >= order.length)
+        return order;
+
+    [order[index], order[target]] = [order[target], order[index]];
+    return order;
+}
+
 export function normalizeConfig(config) {
     if (!config || typeof config !== 'object' || !Array.isArray(config.services))
         throw new Error('Configuration must contain a services array.');
@@ -60,6 +118,8 @@ export function normalizeConfig(config) {
         subtitle: String(config.subtitle || DEFAULT_CONFIG.subtitle),
         eyebrow: String(config.eyebrow ?? DEFAULT_CONFIG.eyebrow),
         showEyebrow: config.showEyebrow !== false,
+        displayMode: normalizeDisplayMode(config.displayMode),
+        groupOrder: normalizeGroupOrder(config.services, config.groupOrder),
         services: config.services,
         history: Array.isArray(config.history) ? config.history : [],
     };
@@ -95,6 +155,7 @@ export function editableBookmark(service = EMPTY_BOOKMARK) {
         group: String(service.group || ''),
         icon: String(service.icon || ''),
         tags: tagsArray(service.tags).join(', '),
+        openMode: normalizeOpenMode(service.openMode),
     };
 }
 
@@ -120,6 +181,12 @@ export function storedBookmark(draft, original = {}) {
     else
         delete bookmark.tags;
 
+    const openMode = normalizeOpenMode(draft.openMode);
+    if (openMode === 'same-tab')
+        bookmark.openMode = openMode;
+    else
+        delete bookmark.openMode;
+
     return bookmark;
 }
 
@@ -131,6 +198,8 @@ function comparableService(service) {
         group: String(service?.group || ''),
         icon: String(service?.icon || ''),
         tags: tagsArray(service?.tags).map(tag => tag.toLowerCase()).sort(),
+        favorite: service?.favorite === true,
+        openMode: normalizeOpenMode(service?.openMode),
     };
 }
 
@@ -139,11 +208,8 @@ export function sameLegacyBookmark(left, right) {
 }
 
 export function findBookmarkIndex(services, target) {
-    if (target?.service?.id) {
-        const byId = services.findIndex(service => service.id === target.service.id);
-        if (byId !== -1)
-            return byId;
-    }
+    if (target?.service?.id)
+        return services.findIndex(service => service.id === target.service.id);
 
     if (Number.isInteger(target?.index) && target.index >= 0 && target.index < services.length &&
         sameLegacyBookmark(services[target.index], target.service))
@@ -171,8 +237,8 @@ export function validateBookmark(draft, hostname) {
 function isTargetService(service, index, target) {
     if (!target)
         return false;
-    if (target.service?.id && service.id)
-        return target.service.id === service.id;
+    if (target.service?.id)
+        return service.id === target.service.id;
     return target.index === index && sameLegacyBookmark(service, target.service);
 }
 
@@ -194,12 +260,44 @@ export function duplicateWarnings(draft, services, target, hostname) {
     return warnings;
 }
 
-export function serviceGroup(service) {
-    return String(service?.group || '').trim() || 'Ungrouped';
+export function duplicateBookmark(service, services = []) {
+    const source = { ...service };
+    delete source.sourceIndex;
+    delete source.resolvedUrl;
+
+    const baseName = String(source.name || 'Bookmark').trim() || 'Bookmark';
+    const existingNames = new Set(services.map(item => String(item?.name || '').trim().toLowerCase()));
+    let name = `${baseName} copy`;
+    let counter = 2;
+    while (existingNames.has(name.toLowerCase())) {
+        name = `${baseName} copy ${counter}`;
+        counter += 1;
+    }
+
+    return {
+        ...source,
+        id: newBookmarkId(),
+        name,
+    };
 }
 
-export function groupNames(services) {
-    return [...new Set(services.map(serviceGroup))];
+export function bookmarkWithFavorite(service, favorite) {
+    const updated = { ...service };
+    if (favorite)
+        updated.favorite = true;
+    else
+        delete updated.favorite;
+    return updated;
+}
+
+export function bookmarkWithGroup(service, group) {
+    const updated = { ...service };
+    const normalizedGroup = String(group || '').trim();
+    if (normalizedGroup && normalizedGroup !== 'Ungrouped')
+        updated.group = normalizedGroup;
+    else
+        delete updated.group;
+    return updated;
 }
 
 export function moveService(services, fromIndex, toIndex) {
@@ -219,6 +317,8 @@ function snapshotConfig(config) {
         subtitle: config.subtitle,
         eyebrow: config.eyebrow,
         showEyebrow: config.showEyebrow,
+        displayMode: config.displayMode,
+        groupOrder: [...config.groupOrder],
         services: JSON.parse(JSON.stringify(config.services)),
     };
 }
@@ -248,10 +348,13 @@ export function restoreHistoryEntry(current, entry) {
     if (!entry?.config || !Array.isArray(entry.config.services))
         throw new Error('This history entry is invalid.');
 
+    const services = JSON.parse(JSON.stringify(entry.config.services));
     return {
         ...normalizeConfig(current),
         ...entry.config,
-        services: JSON.parse(JSON.stringify(entry.config.services)),
+        displayMode: normalizeDisplayMode(entry.config.displayMode),
+        groupOrder: normalizeGroupOrder(services, entry.config.groupOrder),
+        services,
         history: current.history,
     };
 }
@@ -274,6 +377,7 @@ export function normalizeImportedConfig(value, hostname) {
 
     return {
         ...config,
+        groupOrder: normalizeGroupOrder(services, config.groupOrder),
         services,
         history: Array.isArray(config.history) ? config.history.slice(-HISTORY_LIMIT) : [],
     };
