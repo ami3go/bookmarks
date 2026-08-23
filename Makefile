@@ -7,6 +7,8 @@ VERSION := $(shell sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1
 RELEASE_DIR := release
 RELEASE_NAME := $(PACKAGE_NAME)-$(VERSION)
 RELEASE_ARCHIVE := $(RELEASE_DIR)/$(RELEASE_NAME).tar.gz
+SRC_FILES := $(shell find src -type f -print)
+SRC_DIRS := $(shell find src -type d -print)
 
 .PHONY: all dist watch install install-prebuilt install-config devel-install devel-uninstall uninstall clean release
 
@@ -15,7 +17,7 @@ all: dist
 node_modules/.package-lock.json: package.json package-lock.json
 	npm ci --no-audit --no-fund
 
-dist: node_modules/.package-lock.json build.js $(wildcard src/*)
+dist: node_modules/.package-lock.json build.js $(SRC_FILES) $(SRC_DIRS)
 	NODE_ENV=$(NODE_ENV) npm run build
 
 watch: node_modules/.package-lock.json
