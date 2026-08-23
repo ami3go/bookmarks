@@ -1,24 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
-import { Card, CardBody, CardTitle } from '@patternfly/react-core/dist/esm/components/Card/index.js';
-import { Form, FormGroup } from '@patternfly/react-core/dist/esm/components/Form/index.js';
-import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal/index.js';
 import { Page } from '@patternfly/react-core/dist/esm/components/Page/index.js';
 import { SearchInput } from '@patternfly/react-core/dist/esm/components/SearchInput/index.js';
-import { TextArea } from '@patternfly/react-core/dist/esm/components/TextArea/index.js';
-import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput/index.js';
 
 import {
     CONFIG_PATH,
     CONFIG_SYNTAX,
     DEFAULT_CONFIG,
-    DISPLAY_MODES,
     EDIT_MODE_TIMEOUT_MS,
     EMPTY_BOOKMARK,
-    ICON_PRESETS,
     MAX_CONFIG_SIZE,
-    OPEN_MODES,
     allowedUrl,
     bookmarkWithFavorite,
     bookmarkWithGroup,
@@ -29,18 +21,25 @@ import {
     findBookmarkIndex,
     moveGroup,
     moveService,
-    normalizeConfig,
     normalizeGroupOrder,
     normalizeImportedConfig,
     restoreHistoryEntry,
     serviceGroup,
     storedBookmark,
     validateBookmark,
-    withHistory,
 } from './bookmarks.js';
-
-const COLLAPSED_GROUPS_KEY = 'cockpit-bookmarks:collapsed-groups';
-const FAVORITES_SECTION_KEY = 'favorites:pinned';
+import { BookmarkSections } from './bookmark-sections.jsx';
+import {
+    COLLAPSED_GROUPS_KEY,
+    FAVORITES_SECTION_KEY,
+    loadCollapsedGroups,
+    runtimeFreeService,
+    serviceSelectionKey,
+    typingTarget,
+} from './bookmark-ui.js';
+import { modifyConfiguration, watchConfiguration } from './cockpit-config.js';
+import { ManagementDialogs } from './management-dialogs.jsx';
+import { ServiceDiscovery } from './service-discovery.jsx';
 
 function PencilIcon() {
     return (
@@ -48,46 +47,6 @@ function PencilIcon() {
             <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25Zm17.71-10.04a.996.996 0 0 0 0-1.41l-2.5-2.5a.996.996 0 0 0-1.41 0l-1.96 1.96 3.75 3.75 2.12-1.8Z" />
         </svg>
     );
-}
-
-function runtimeFreeService(service) {
-    const { sourceIndex, resolvedUrl, ...storedService } = service;
-    return storedService;
-}
-
-function serviceSelectionKey(service) {
-    if (service.id)
-        return `id:${service.id}`;
-
-    const tags = Array.isArray(service.tags) ? service.tags.join('\u001f') : String(service.tags || '');
-    return `legacy:${service.name || ''}\u001f${service.url || ''}\u001f${service.description || ''}\u001f${service.group || ''}\u001f${service.icon || ''}\u001f${tags}`;
-}
-
-function formatHistoryDate(value) {
-    try {
-        const date = new Date(value);
-        return Number.isNaN(date.getTime()) ? String(value || 'Unknown time') : date.toLocaleString();
-    } catch (_) {
-        return String(value || 'Unknown time');
-    }
-}
-
-function closeActionMenu(event) {
-    event.currentTarget.closest('details')?.removeAttribute('open');
-}
-
-function loadCollapsedGroups() {
-    try {
-        const stored = JSON.parse(window.localStorage.getItem(COLLAPSED_GROUPS_KEY) || '[]');
-        return new Set(Array.isArray(stored) ? stored.map(value => String(value)) : []);
-    } catch (_) {
-        return new Set();
-    }
-}
-
-function typingTarget(target) {
-    return target instanceof HTMLElement &&
-        (target.matches('input, textarea, select') || target.isContentEditable);
 }
 
 export const Application = () => {
@@ -123,46 +82,17 @@ export const Application = () => {
 
     const hostname = window.location.hostname;
 
-    useEffect(() => {
-        const file = window.cockpit.file(CONFIG_PATH, { syntax: CONFIG_SYNTAX, max_read_size: MAX_CONFIG_SIZE });
-        let active = true;
-        const watch = file.watch((content, _tag, error) => {
-            if (!active)
-                return;
-
-            if (error) {
-                setNotice({
-                    variant: 'danger',
-                    text: `Could not monitor ${CONFIG_PATH}: ${window.cockpit.message(error)}`,
-                });
-                return;
-            }
-
-            if (content === null) {
-                setConfig({ ...DEFAULT_CONFIG, services: [], history: [] });
-                setNotice({
-                    variant: 'info',
-                    text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
-                });
-                return;
-            }
-
-            try {
-                setConfig(normalizeConfig(content));
-            } catch (loadError) {
-                setNotice({
-                    variant: 'danger',
-                    text: `Could not load ${CONFIG_PATH}: ${window.cockpit.message(loadError)}`,
-                });
-            }
-        });
-
-        return () => {
-            active = false;
-            watch.remove();
-            file.close();
-        };
-    }, []);
+    useEffect(() => watchConfiguration(
+        setConfig,
+        error => setNotice({
+            variant: 'danger',
+            text: `Could not monitor ${CONFIG_PATH}: ${window.cockpit.message(error)}`,
+        }),
+        () => setNotice({
+            variant: 'info',
+            text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
+        })
+    ), []);
 
     useEffect(() => {
         const permission = window.cockpit.permission({ admin: true });
@@ -370,32 +300,18 @@ export const Application = () => {
     };
 
     const modifyConfig = (transform, successText, onSuccess, action = successText, errorArea = null) => {
-        const file = window.cockpit.file(CONFIG_PATH, {
-            syntax: CONFIG_SYNTAX,
-            max_read_size: MAX_CONFIG_SIZE,
-            superuser: 'require',
-        });
-
         clearWriteError(errorArea);
         setSaving(true);
         setNotice(null);
 
-        file.modify(oldContent => {
-            const current = oldContent === null
-                ? { ...DEFAULT_CONFIG, services: [], history: [] }
-                : normalizeConfig(oldContent);
-            const next = transform(current);
-            return withHistory(current, next, action);
-        })
-            .then(newContent => {
-                file.close();
+        modifyConfiguration(transform, action)
+            .then(newConfig => {
                 setSaving(false);
-                setConfig(normalizeConfig(newContent));
+                setConfig(newConfig);
                 setNotice({ variant: 'success', text: successText });
                 onSuccess?.();
             })
             .catch(error => {
-                file.close();
                 setSaving(false);
                 const text = `Could not update ${CONFIG_PATH}: ${window.cockpit.message(error)}`;
                 setNotice({ variant: 'danger', text });
@@ -829,272 +745,32 @@ export const Application = () => {
                         <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>
                     </div>
                 ) : (
-                    <div className="bookmark-groups">
-                        {sections.map(({ sectionKey, collapseKey, name: group, items: groupServices, isFavorites }, sectionIndex) => {
-                            const headingId = `bookmark-group-heading-${sectionIndex}`;
-                            const isCollapsed = collapsedGroups.has(collapseKey) && !query.trim();
-                            return (
-                                <section className={`bookmark-group-section${isFavorites ? ' is-favorites' : ''}`} key={sectionKey} aria-labelledby={headingId}>
-                                    <div className="bookmark-group-heading">
-                                        <Button
-                                            variant="plain"
-                                            aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${group} group`}
-                                            aria-expanded={!isCollapsed}
-                                            title={isCollapsed ? 'Expand group' : 'Collapse group'}
-                                            onClick={() => toggleGroupCollapsed(collapseKey)}
-                                        >
-                                            <span aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
-                                        </Button>
-                                        <h2 id={headingId}>{group}</h2>
-                                        <span>{groupServices.length}</span>
-                                        {editMode && canEdit === true && !isFavorites && groups.length > 1 && (
-                                            <div
-                                                style={{ display: 'flex', gap: '0.15rem', marginLeft: 'auto' }}
-                                                onClick={event => event.stopPropagation()}
-                                                onKeyDown={event => event.stopPropagation()}
-                                            >
-                                                <Button
-                                                    variant="plain"
-                                                    aria-label={`Move ${group} group up`}
-                                                    title="Move group up"
-                                                    isDisabled={groups[0] === group || saving}
-                                                    onClick={() => moveGroupWithinOrder(group, -1)}
-                                                >
-                                                    ↑
-                                                </Button>
-                                                <Button
-                                                    variant="plain"
-                                                    aria-label={`Move ${group} group down`}
-                                                    title="Move group down"
-                                                    isDisabled={groups[groups.length - 1] === group || saving}
-                                                    onClick={() => moveGroupWithinOrder(group, 1)}
-                                                >
-                                                    ↓
-                                                </Button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {!isCollapsed && (
-                                        <div
-                                            className="bookmarks-grid"
-                                            style={compactMode ? {
-                                                gridTemplateColumns: 'repeat(auto-fill, minmax(13rem, 1fr))',
-                                                gap: '0.65rem',
-                                            } : undefined}
-                                        >
-                                            {groupServices.map(service => {
-                                                const siblingIndexes = isFavorites ? [] : config.services
-                                                    .map((item, index) => ({ item, index }))
-                                                    .filter(({ item }) => serviceGroup(item) === serviceGroup(service))
-                                                    .map(({ index }) => index);
-                                                const groupPosition = siblingIndexes.indexOf(service.sourceIndex);
-                                                const canMoveUp = !isFavorites && groupPosition > 0;
-                                                const canMoveDown = !isFavorites && groupPosition >= 0 && groupPosition < siblingIndexes.length - 1;
-                                                const selectionKey = serviceSelectionKey(service);
-                                                const isSelected = editMode && selectedBookmark === selectionKey;
-                                                const isDragging = dragSource?.sourceIndex === service.sourceIndex;
-                                                const opensSameTab = service.openMode === 'same-tab';
-
-                                                return (
-                                                    <Card
-                                                        className={`bookmark-card${editMode ? ' is-editable' : ''}${isSelected ? ' is-selected' : ''}${isDragging ? ' is-dragging' : ''}`}
-                                                        key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
-                                                        role={editMode ? 'button' : 'link'}
-                                                        tabIndex={0}
-                                                        draggable={!isFavorites && editMode && canEdit === true && !saving}
-                                                        aria-label={editMode
-                                                            ? `${isFavorites ? 'Select' : 'Select for reordering'} ${service.name || 'service'}`
-                                                            : `Open ${service.name || 'service'} in ${opensSameTab ? 'the same tab' : 'a new tab'}`}
-                                                        aria-pressed={editMode ? isSelected : undefined}
-                                                        onClick={() => {
-                                                            if (editMode && canEdit === true)
-                                                                selectService(service);
-                                                            else
-                                                                openService(service);
-                                                        }}
-                                                        onKeyDown={event => {
-                                                            if (event.key === 'Enter' || (editMode && event.key === ' ')) {
-                                                                event.preventDefault();
-                                                                if (editMode && canEdit === true)
-                                                                    selectService(service);
-                                                                else if (event.key === 'Enter')
-                                                                    openService(service);
-                                                            }
-                                                        }}
-                                                        onDragStart={event => {
-                                                            if (isFavorites || !editMode || canEdit !== true || saving) {
-                                                                event.preventDefault();
-                                                                return;
-                                                            }
-                                                            setSelectedBookmark(selectionKey);
-                                                            setDragSource(service);
-                                                            event.dataTransfer.effectAllowed = 'move';
-                                                            event.dataTransfer.setData('text/plain', service.id || String(service.sourceIndex));
-                                                        }}
-                                                        onDragEnd={() => setDragSource(null)}
-                                                        onDragOver={event => {
-                                                            if (!isFavorites && editMode && dragSource && serviceGroup(dragSource) === serviceGroup(service)) {
-                                                                event.preventDefault();
-                                                                event.dataTransfer.dropEffect = 'move';
-                                                            }
-                                                        }}
-                                                        onDrop={event => {
-                                                            event.preventDefault();
-                                                            if (!isFavorites)
-                                                                reorderBetween(dragSource, service);
-                                                            setDragSource(null);
-                                                        }}
-                                                    >
-                                                        <CardTitle style={compactMode ? { padding: '0.65rem 0.75rem 0.35rem' } : undefined}>
-                                                            <div className="bookmark-title-row">
-                                                                <div className="bookmark-title-main">
-                                                                    <span
-                                                                        className="bookmark-icon"
-                                                                        aria-hidden="true"
-                                                                        style={compactMode ? {
-                                                                            width: '1.5rem',
-                                                                            height: '1.5rem',
-                                                                            marginRight: '0.45rem',
-                                                                            fontSize: '1rem',
-                                                                        } : undefined}
-                                                                    >
-                                                                        {service.icon || '↗'}
-                                                                    </span>
-                                                                    <span>{service.name || 'Unnamed service'}</span>
-                                                                    {service.favorite === true && <span aria-hidden="true" title="Favorite">★</span>}
-                                                                </div>
-                                                                {editMode && canEdit === true && (
-                                                                    <div
-                                                                        className="bookmark-card-actions"
-                                                                        onClick={event => {
-                                                                            event.stopPropagation();
-                                                                            setSelectedBookmark(selectionKey);
-                                                                        }}
-                                                                        onKeyDown={event => event.stopPropagation()}
-                                                                    >
-                                                                        <details className="bookmark-action-menu">
-                                                                            <summary
-                                                                                aria-label={`Actions for ${service.name || 'service'}`}
-                                                                                title="Actions"
-                                                                            >
-                                                                                ⋮
-                                                                            </summary>
-                                                                            <div className="bookmark-action-menu-list">
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="bookmark-action-menu-item"
-                                                                                    onClick={event => {
-                                                                                        closeActionMenu(event);
-                                                                                        openEdit(service);
-                                                                                    }}
-                                                                                    disabled={saving}
-                                                                                >
-                                                                                    Edit
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="bookmark-action-menu-item"
-                                                                                    onClick={event => {
-                                                                                        closeActionMenu(event);
-                                                                                        toggleFavorite(service);
-                                                                                    }}
-                                                                                    disabled={saving}
-                                                                                >
-                                                                                    {service.favorite === true ? '★ Remove from Favorites' : '☆ Add to Favorites'}
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="bookmark-action-menu-item"
-                                                                                    onClick={event => {
-                                                                                        closeActionMenu(event);
-                                                                                        duplicateService(service);
-                                                                                    }}
-                                                                                    disabled={saving}
-                                                                                >
-                                                                                    Duplicate
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="bookmark-action-menu-item"
-                                                                                    onClick={event => {
-                                                                                        closeActionMenu(event);
-                                                                                        openMoveToGroup(service);
-                                                                                    }}
-                                                                                    disabled={saving}
-                                                                                >
-                                                                                    Move to group…
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="bookmark-action-menu-item"
-                                                                                    onClick={event => {
-                                                                                        closeActionMenu(event);
-                                                                                        moveWithinGroup(service, -1);
-                                                                                    }}
-                                                                                    disabled={!canMoveUp || saving}
-                                                                                >
-                                                                                    ↑ Move up
-                                                                                </button>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="bookmark-action-menu-item"
-                                                                                    onClick={event => {
-                                                                                        closeActionMenu(event);
-                                                                                        moveWithinGroup(service, 1);
-                                                                                    }}
-                                                                                    disabled={!canMoveDown || saving}
-                                                                                >
-                                                                                    ↓ Move down
-                                                                                </button>
-                                                                                <div className="bookmark-action-menu-separator" />
-                                                                                <button
-                                                                                    type="button"
-                                                                                    className="bookmark-action-menu-item is-danger"
-                                                                                    onClick={event => {
-                                                                                        closeActionMenu(event);
-                                                                                        requestDelete(service);
-                                                                                    }}
-                                                                                    disabled={saving}
-                                                                                >
-                                                                                    Delete
-                                                                                </button>
-                                                                            </div>
-                                                                        </details>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </CardTitle>
-                                                        <CardBody style={compactMode ? { padding: '0 0.75rem 0.65rem' } : undefined}>
-                                                            <p
-                                                                className="bookmark-description"
-                                                                style={compactMode ? {
-                                                                    fontSize: '0.82rem',
-                                                                    lineHeight: 1.35,
-                                                                    overflow: 'hidden',
-                                                                    textOverflow: 'ellipsis',
-                                                                    whiteSpace: 'nowrap',
-                                                                } : undefined}
-                                                            >
-                                                                {service.description || service.resolvedUrl}
-                                                            </p>
-                                                            <div
-                                                                className="bookmark-meta"
-                                                                style={compactMode ? { marginTop: '0.5rem' } : undefined}
-                                                            >
-                                                                {Array.isArray(service.tags) && service.tags.map(tag => (
-                                                                    <span className="bookmark-tag" key={tag}>{tag}</span>
-                                                                ))}
-                                                            </div>
-                                                        </CardBody>
-                                                    </Card>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                </section>
-                            );
-                        })}
-                    </div>
+                    <BookmarkSections
+                        sections={sections}
+                        collapsedGroups={collapsedGroups}
+                        query={query}
+                        editMode={editMode}
+                        canEdit={canEdit}
+                        groups={groups}
+                        saving={saving}
+                        configServices={config.services}
+                        selectedBookmark={selectedBookmark}
+                        dragSource={dragSource}
+                        compactMode={compactMode}
+                        onToggleGroupCollapsed={toggleGroupCollapsed}
+                        onMoveGroupWithinOrder={moveGroupWithinOrder}
+                        onSelectService={selectService}
+                        onOpenService={openService}
+                        onSetSelectedBookmark={setSelectedBookmark}
+                        onSetDragSource={setDragSource}
+                        onReorderBetween={reorderBetween}
+                        onOpenEdit={openEdit}
+                        onToggleFavorite={toggleFavorite}
+                        onDuplicateService={duplicateService}
+                        onOpenMoveToGroup={openMoveToGroup}
+                        onMoveWithinGroup={moveWithinGroup}
+                        onRequestDelete={requestDelete}
+                    />
                 )}
 
                 <footer className="bookmarks-footer">
@@ -1102,304 +778,45 @@ export const Application = () => {
                 </footer>
             </main>
 
-            <Modal isOpen={editor !== null} onClose={closeEditor} variant="medium">
-                <ModalHeader title={editor?.mode === 'edit' ? 'Edit bookmark' : 'Add bookmark'} />
-                <ModalBody>
-                    {writeErrors.editor && <Alert isInline variant="danger" title={writeErrors.editor} />}
-                    <Form id="bookmark-editor-form" onSubmit={submitEditor}>
-                        {warnings.length > 0 && (
-                            <Alert isInline variant="warning" title="Possible duplicate">
-                                {warnings.join(' ')}
-                            </Alert>
-                        )}
-                        <FormGroup label="Name" isRequired fieldId="bookmark-name">
-                            <TextInput
-                                id="bookmark-name"
-                                value={draft.name}
-                                onChange={(_event, value) => updateDraft('name', value)}
-                                isRequired
-                                validated={formErrors.name ? 'error' : 'default'}
-                            />
-                            {formErrors.name && <div className="bookmark-field-error">{formErrors.name}</div>}
-                        </FormGroup>
-                        <FormGroup label="URL" isRequired fieldId="bookmark-url">
-                            <TextInput
-                                id="bookmark-url"
-                                value={draft.url}
-                                onChange={(_event, value) => updateDraft('url', value)}
-                                placeholder="http://{host}:3000"
-                                isRequired
-                                validated={formErrors.url ? 'error' : 'default'}
-                            />
-                            {formErrors.url && <div className="bookmark-field-error">{formErrors.url}</div>}
-                            {!formErrors.url && (
-                                <div className="bookmark-field-help">
-                                    Use <code>{'{host}'}</code> for the Cockpit host name or IP address.
-                                    {resolvedPreview && allowedUrl(resolvedPreview) && (
-                                        <div>Resolved URL: <code>{resolvedPreview}</code></div>
-                                    )}
-                                </div>
-                            )}
-                        </FormGroup>
-                        <FormGroup label="Open behavior" fieldId="bookmark-open-mode">
-                            <select
-                                id="bookmark-open-mode"
-                                value={draft.openMode}
-                                onChange={event => updateDraft('openMode', event.target.value)}
-                                style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
-                            >
-                                {OPEN_MODES.map(mode => (
-                                    <option value={mode} key={mode}>
-                                        {mode === 'same-tab' ? 'Same tab' : 'New tab'}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="bookmark-field-help">New tab is the default for existing bookmarks.</div>
-                        </FormGroup>
-                        <FormGroup label="Description" fieldId="bookmark-description">
-                            <TextArea
-                                id="bookmark-description"
-                                value={draft.description}
-                                onChange={(_event, value) => updateDraft('description', value)}
-                                resizeOrientation="vertical"
-                            />
-                        </FormGroup>
-                        <FormGroup label="Group" fieldId="bookmark-group">
-                            <TextInput
-                                id="bookmark-group"
-                                value={draft.group}
-                                onChange={(_event, value) => updateDraft('group', value)}
-                                placeholder="Monitoring"
-                                list="bookmark-group-options"
-                            />
-                            <datalist id="bookmark-group-options">
-                                {groups.filter(group => group !== 'Ungrouped').map(group => <option value={group} key={group} />)}
-                            </datalist>
-                        </FormGroup>
-                        <FormGroup label="Icon" fieldId="bookmark-icon">
-                            <TextInput
-                                id="bookmark-icon"
-                                value={draft.icon}
-                                onChange={(_event, value) => updateDraft('icon', value)}
-                                placeholder="📊"
-                            />
-                            <div className="bookmark-icon-presets" aria-label="Common icons">
-                                {ICON_PRESETS.map(icon => (
-                                    <button
-                                        type="button"
-                                        className={draft.icon === icon ? 'is-selected' : ''}
-                                        onClick={() => updateDraft('icon', icon)}
-                                        aria-label={`Use ${icon} icon`}
-                                        key={icon}
-                                    >
-                                        {icon}
-                                    </button>
-                                ))}
-                            </div>
-                        </FormGroup>
-                        <FormGroup label="Tags" fieldId="bookmark-tags">
-                            <TextInput
-                                id="bookmark-tags"
-                                value={draft.tags}
-                                onChange={(_event, value) => updateDraft('tags', value)}
-                                placeholder="dashboard, monitoring"
-                            />
-                            <div className="bookmark-field-help">Separate tags with commas. Tags are searchable.</div>
-                        </FormGroup>
-                    </Form>
-                </ModalBody>
-                <ModalFooter>
-                    <Button variant="primary" type="submit" form="bookmark-editor-form" isDisabled={saving}>
-                        {saving ? 'Saving…' : (editor?.mode === 'edit' ? 'Save changes' : 'Add bookmark')}
-                    </Button>
-                    <Button variant="link" onClick={closeEditor} isDisabled={saving}>Cancel</Button>
-                </ModalFooter>
-            </Modal>
+            <ManagementDialogs
+                editor={editor}
+                closeEditor={closeEditor}
+                writeErrors={writeErrors}
+                submitEditor={submitEditor}
+                warnings={warnings}
+                draft={draft}
+                updateDraft={updateDraft}
+                formErrors={formErrors}
+                resolvedPreview={resolvedPreview}
+                groups={groups}
+                saving={saving}
+                moveTarget={moveTarget}
+                setMoveTarget={setMoveTarget}
+                moveGroupDraft={moveGroupDraft}
+                setMoveGroupDraft={setMoveGroupDraft}
+                clearWriteError={clearWriteError}
+                moveBookmarkToGroup={moveBookmarkToGroup}
+                editMode={editMode}
+                deleteTarget={deleteTarget}
+                setDeleteTarget={setDeleteTarget}
+                deleteBookmark={deleteBookmark}
+                settingsOpen={settingsOpen}
+                setSettingsOpen={setSettingsOpen}
+                settingsDraft={settingsDraft}
+                setSettingsDraft={setSettingsDraft}
+                settingsError={settingsError}
+                setSettingsError={setSettingsError}
+                submitSettings={submitSettings}
+                importCandidate={importCandidate}
+                setImportCandidate={setImportCandidate}
+                confirmImport={confirmImport}
+                historyOpen={historyOpen}
+                setHistoryOpen={setHistoryOpen}
+                config={config}
+                restoreHistory={restoreHistory}
+            />
 
-            <Modal isOpen={moveTarget !== null} onClose={() => !saving && setMoveTarget(null)} variant="small">
-                <ModalHeader title="Move bookmark to group" />
-                <ModalBody>
-                    {writeErrors.move && <Alert isInline variant="danger" title={writeErrors.move} />}
-                    {moveTarget && (
-                        <FormGroup label={`Destination for ${moveTarget.service.name || 'bookmark'}`} fieldId="move-bookmark-group">
-                            <select
-                                id="move-bookmark-group"
-                                value={moveGroupDraft}
-                                onChange={event => {
-                                    clearWriteError('move');
-                                    setMoveGroupDraft(event.target.value);
-                                }}
-                                style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
-                            >
-                                {[...new Set(['Ungrouped', ...groups])].map(group => (
-                                    <option value={group} key={group}>{group}</option>
-                                ))}
-                            </select>
-                        </FormGroup>
-                    )}
-                </ModalBody>
-                <ModalFooter>
-                    <Button
-                        variant="primary"
-                        onClick={moveBookmarkToGroup}
-                        isDisabled={saving || !editMode || !moveTarget || serviceGroup(moveTarget.service) === moveGroupDraft}
-                    >
-                        {saving ? 'Moving…' : 'Move'}
-                    </Button>
-                    <Button variant="link" onClick={() => setMoveTarget(null)} isDisabled={saving}>Cancel</Button>
-                </ModalFooter>
-            </Modal>
-
-            <Modal isOpen={deleteTarget !== null} onClose={() => !saving && setDeleteTarget(null)} variant="small">
-                <ModalHeader title="Delete bookmark?" titleIconVariant="danger" />
-                <ModalBody>
-                    {writeErrors.delete && <Alert isInline variant="danger" title={writeErrors.delete} />}
-                    {deleteTarget && (
-                        <p>
-                            Delete <strong>{deleteTarget.service.name || 'this bookmark'}</strong>? This removes it from {CONFIG_PATH}.
-                        </p>
-                    )}
-                </ModalBody>
-                <ModalFooter>
-                    <Button variant="danger" onClick={deleteBookmark} isDisabled={saving}>
-                        {saving ? 'Deleting…' : 'Delete'}
-                    </Button>
-                    <Button variant="link" onClick={() => setDeleteTarget(null)} isDisabled={saving}>Cancel</Button>
-                </ModalFooter>
-            </Modal>
-
-            <Modal isOpen={settingsOpen} onClose={() => !saving && setSettingsOpen(false)} variant="medium">
-                <ModalHeader title="Page settings" />
-                <ModalBody>
-                    {writeErrors.settings && <Alert isInline variant="danger" title={writeErrors.settings} />}
-                    <Form id="bookmark-settings-form" onSubmit={submitSettings}>
-                        <FormGroup label="Title" isRequired fieldId="settings-title">
-                            <TextInput
-                                id="settings-title"
-                                value={settingsDraft.title}
-                                onChange={(_event, value) => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, title: value }));
-                                    setSettingsError('');
-                                }}
-                                validated={settingsError ? 'error' : 'default'}
-                            />
-                            {settingsError && <div className="bookmark-field-error">{settingsError}</div>}
-                        </FormGroup>
-                        <FormGroup label="Subtitle" fieldId="settings-subtitle">
-                            <TextInput
-                                id="settings-subtitle"
-                                value={settingsDraft.subtitle}
-                                onChange={(_event, value) => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, subtitle: value }));
-                                }}
-                            />
-                        </FormGroup>
-                        <FormGroup label="Eyebrow" fieldId="settings-eyebrow">
-                            <TextInput
-                                id="settings-eyebrow"
-                                value={settingsDraft.eyebrow}
-                                onChange={(_event, value) => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, eyebrow: value }));
-                                }}
-                                isDisabled={!settingsDraft.showEyebrow}
-                            />
-                        </FormGroup>
-                        <label className="bookmarks-checkbox">
-                            <input
-                                type="checkbox"
-                                checked={settingsDraft.showEyebrow}
-                                onChange={event => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, showEyebrow: event.target.checked }));
-                                }}
-                            />
-                            <span>Show eyebrow above the page title</span>
-                        </label>
-                        <FormGroup label="Display density" fieldId="settings-display-mode">
-                            <select
-                                id="settings-display-mode"
-                                value={settingsDraft.displayMode}
-                                onChange={event => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, displayMode: event.target.value }));
-                                }}
-                                style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
-                            >
-                                {DISPLAY_MODES.map(mode => (
-                                    <option value={mode} key={mode}>
-                                        {mode === 'compact' ? 'Compact cards' : 'Standard cards'}
-                                    </option>
-                                ))}
-                            </select>
-                            <div className="bookmark-field-help">
-                                Compact cards fit more services on screen while keeping groups and management controls.
-                            </div>
-                        </FormGroup>
-                    </Form>
-                </ModalBody>
-                <ModalFooter>
-                    <Button variant="primary" type="submit" form="bookmark-settings-form" isDisabled={saving}>
-                        {saving ? 'Saving…' : 'Save settings'}
-                    </Button>
-                    <Button variant="link" onClick={() => setSettingsOpen(false)} isDisabled={saving}>Cancel</Button>
-                </ModalFooter>
-            </Modal>
-
-            <Modal isOpen={importCandidate !== null} onClose={() => !saving && setImportCandidate(null)} variant="small">
-                <ModalHeader title="Import configuration?" />
-                <ModalBody>
-                    {writeErrors.import && <Alert isInline variant="danger" title={writeErrors.import} />}
-                    {importCandidate && (
-                        <>
-                            <p>
-                                Replace the current configuration with <strong>{importCandidate.services.length}</strong> imported bookmarks?
-                            </p>
-                            <p>The current configuration will be kept in History before the import is applied.</p>
-                        </>
-                    )}
-                </ModalBody>
-                <ModalFooter>
-                    <Button variant="primary" onClick={confirmImport} isDisabled={saving || !editMode}>
-                        {saving ? 'Importing…' : 'Import'}
-                    </Button>
-                    <Button variant="link" onClick={() => setImportCandidate(null)} isDisabled={saving}>Cancel</Button>
-                </ModalFooter>
-            </Modal>
-
-            <Modal isOpen={historyOpen} onClose={() => !saving && setHistoryOpen(false)} variant="medium">
-                <ModalHeader title="Configuration history" />
-                <ModalBody>
-                    {writeErrors.history && <Alert isInline variant="danger" title={writeErrors.history} />}
-                    {config.history.length === 0 ? (
-                        <p>No history yet. A snapshot is saved automatically before each configuration change.</p>
-                    ) : (
-                        <div className="bookmarks-history-list">
-                            {[...config.history].reverse().map(entry => (
-                                <div className="bookmarks-history-item" key={entry.id || `${entry.savedAt}-${entry.action}`}>
-                                    <div>
-                                        <strong>{entry.action || 'Configuration changed'}</strong>
-                                        <div>{formatHistoryDate(entry.savedAt)}</div>
-                                        <div>{entry.config?.services?.length ?? 0} bookmarks</div>
-                                    </div>
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => restoreHistory(entry)}
-                                        isDisabled={saving || !editMode}
-                                    >
-                                        Restore
-                                    </Button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </ModalBody>
-                <ModalFooter>
-                    <Button variant="secondary" onClick={() => setHistoryOpen(false)} isDisabled={saving}>Close</Button>
-                </ModalFooter>
-            </Modal>
+            <ServiceDiscovery visible={editMode && canEdit === true} />
         </Page>
     );
 };
