@@ -237,8 +237,8 @@ export function validateBookmark(draft, hostname) {
 function isTargetService(service, index, target) {
     if (!target)
         return false;
-    if (target.service?.id && service.id)
-        return target.service.id === service.id;
+    if (target.service?.id)
+        return service.id === target.service.id;
     return target.index === index && sameLegacyBookmark(service, target.service);
 }
 
