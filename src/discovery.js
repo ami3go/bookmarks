@@ -67,6 +67,13 @@ function processNames(line) {
     return result;
 }
 
+function listenerProcessNames(listener) {
+    const values = Array.isArray(listener?.processes) && listener.processes.length
+        ? listener.processes
+        : [listener?.process];
+    return [...new Set(values.map(value => String(value || '').trim()).filter(Boolean))];
+}
+
 function loopbackAddress(address) {
     const value = String(address || '').replace(/^\[|\]$/g, '').split('%')[0].toLowerCase();
     return value === '::1' || value === 'localhost' || value.startsWith('127.');
@@ -166,9 +173,10 @@ function serviceLabel(process, port) {
 }
 
 function listenerSupport(listener) {
-    if (listener.process && /cockpit/i.test(listener.process))
+    const processes = listenerProcessNames(listener);
+    if (processes.some(process => /cockpit/i.test(process)))
         return { supported: false, reason: 'Cockpit itself' };
-    if (NON_WEB_PORTS.has(listener.port) || NON_WEB_PROCESS_HINT.test(listener.process))
+    if (NON_WEB_PORTS.has(listener.port) || processes.some(process => NON_WEB_PROCESS_HINT.test(process)))
         return { supported: false, reason: 'Known non-web/system listener' };
     return { supported: true, reason: '' };
 }
@@ -177,12 +185,14 @@ export function buildDiscoveryCandidates(listeners, services, hostname) {
     const existingPorts = existingLocalBookmarkPorts(services, hostname);
 
     return (listeners || []).map(listener => {
+        const processes = listenerProcessNames(listener);
+        const representativeProcess = String(listener.process || processes[0] || '');
         const scheme = TLS_PORTS.has(listener.port) ? 'https' : 'http';
         const support = listenerSupport(listener);
-        const likelyWeb = WEB_PORTS.has(listener.port) || WEB_PROCESS_HINT.test(listener.process);
+        const likelyWeb = WEB_PORTS.has(listener.port) || processes.some(process => WEB_PROCESS_HINT.test(process));
         const alreadyBookmarked = existingPorts.has(listener.port);
         const portTag = `port-${listener.port}`;
-        const processTag = String(listener.process || '')
+        const processTag = representativeProcess
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-|-$/g, '');
@@ -191,17 +201,17 @@ export function buildDiscoveryCandidates(listeners, services, hostname) {
             ...listener,
             scheme,
             url: `${scheme}://{host}:${listener.port}`,
-            name: serviceLabel(listener.process, listener.port),
+            name: serviceLabel(representativeProcess, listener.port),
             supported: support.supported,
             reason: support.reason,
             likelyWeb,
             alreadyBookmarked,
             selected: support.supported && likelyWeb && !listener.localOnly && !alreadyBookmarked && listener.port !== 9090,
             bookmark: {
-                name: serviceLabel(listener.process, listener.port),
+                name: serviceLabel(representativeProcess, listener.port),
                 url: `${scheme}://{host}:${listener.port}`,
-                description: listener.process
-                    ? `Detected ${listener.process} listening on TCP port ${listener.port}`
+                description: representativeProcess
+                    ? `Detected ${representativeProcess} listening on TCP port ${listener.port}`
                     : `Detected TCP listener on port ${listener.port}`,
                 group: 'Discovered',
                 icon: '🌐',
