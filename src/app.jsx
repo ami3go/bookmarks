@@ -152,11 +152,9 @@ export const Application = () => {
     }, [collapsedGroups]);
 
     useEffect(() => {
-        if (!config.showHeader && !editMode && groupFilter !== 'all')
-            setGroupFilter('all');
-        if ((!config.showSearch || (!config.showHeader && !editMode)) && query)
+        if (!config.showSearch && query)
             setQuery('');
-    }, [config.showHeader, config.showSearch, editMode, groupFilter, query]);
+    }, [config.showSearch, query]);
 
     useEffect(() => {
         const managementOpen = Boolean(editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen);
@@ -165,7 +163,7 @@ export const Application = () => {
                 return;
 
             const isTyping = typingTarget(event.target);
-            const searchVisible = config.showSearch && (config.showHeader || editMode);
+            const searchVisible = config.showSearch;
             if (event.key === '/' && !isTyping && searchVisible) {
                 const search = document.querySelector('.bookmarks-search input');
                 if (search) {
@@ -206,7 +204,7 @@ export const Application = () => {
 
         document.addEventListener('keydown', handleKeyboard);
         return () => document.removeEventListener('keydown', handleKeyboard);
-    }, [query, config.showHeader, config.showSearch, editMode, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen]);
+    }, [query, config.showSearch, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen]);
 
     const groups = useMemo(
         () => normalizeGroupOrder(config.services, config.groupOrder),
@@ -298,8 +296,10 @@ export const Application = () => {
     );
     const resolvedPreview = draft.url.trim() ? expandUrl(draft.url.trim(), hostname) : '';
     const compactMode = config.displayMode === 'compact';
-    const headerVisible = config.showHeader || editMode;
-    const searchVisible = headerVisible && config.showSearch;
+    const headerTextVisible = config.showHeader || editMode;
+    const titleVisible = config.showTitle;
+    const headingVisible = headerTextVisible || titleVisible;
+    const searchVisible = config.showSearch;
 
     const clearWriteError = area => {
         if (!area)
@@ -674,62 +674,51 @@ export const Application = () => {
     return (
         <Page className="pf-m-no-sidebar">
             <main className="bookmarks-page">
-                {headerVisible ? (
-                    <header className="bookmarks-header">
+                <header className={`bookmarks-header${headingVisible ? '' : ' bookmarks-header-no-heading'}`}>
+                    {headingVisible && (
                         <div className="bookmarks-heading">
-                            {config.showEyebrow && config.eyebrow && <p className="bookmarks-eyebrow">{config.eyebrow}</p>}
-                            {config.showTitle && <h1>{config.title}</h1>}
-                            {config.subtitle && <p className="bookmarks-subtitle">{config.subtitle}</p>}
-                        </div>
-                        <div className="bookmarks-header-actions">
-                            {searchVisible && (
-                                <div className="bookmarks-search">
-                                    <SearchInput
-                                        aria-label="Search bookmarks"
-                                        placeholder="Search bookmarks…"
-                                        value={query}
-                                        onChange={(_event, value) => setQuery(value)}
-                                        onClear={() => setQuery('')}
-                                    />
-                                </div>
+                            {headerTextVisible && config.showEyebrow && config.eyebrow && (
+                                <p className="bookmarks-eyebrow">{config.eyebrow}</p>
                             )}
-                            <label className="bookmarks-group-filter">
-                                <span className="sr-only">Filter by group</span>
-                                <select value={groupFilter} onChange={event => setGroupFilter(event.target.value)}>
-                                    <option value="all">All groups</option>
-                                    {groups.map(group => <option value={group} key={group}>{group}</option>)}
-                                </select>
-                            </label>
-                            <Button variant="primary" onClick={openAdd} isDisabled={canEdit !== true}>
-                                Add bookmark
-                            </Button>
-                            <Button
-                                variant={editMode ? 'secondary' : 'plain'}
-                                className="bookmark-edit-mode-toggle"
-                                onClick={toggleEditMode}
-                                isDisabled={canEdit !== true}
-                                aria-label={editMode ? 'Disable edit mode' : 'Enable edit mode'}
-                                aria-pressed={editMode}
-                                title={editMode ? 'Disable edit mode' : 'Enable edit mode'}
-                            >
-                                <PencilIcon />
-                            </Button>
+                            {titleVisible && <h1>{config.title}</h1>}
+                            {headerTextVisible && config.subtitle && <p className="bookmarks-subtitle">{config.subtitle}</p>}
                         </div>
-                    </header>
-                ) : canEdit === true ? (
-                    <div className="bookmarks-hidden-header-edit">
+                    )}
+                    <div className="bookmarks-header-actions">
+                        {searchVisible && (
+                            <div className="bookmarks-search">
+                                <SearchInput
+                                    aria-label="Search bookmarks"
+                                    placeholder="Search bookmarks…"
+                                    value={query}
+                                    onChange={(_event, value) => setQuery(value)}
+                                    onClear={() => setQuery('')}
+                                />
+                            </div>
+                        )}
+                        <label className="bookmarks-group-filter">
+                            <span className="sr-only">Filter by group</span>
+                            <select value={groupFilter} onChange={event => setGroupFilter(event.target.value)}>
+                                <option value="all">All groups</option>
+                                {groups.map(group => <option value={group} key={group}>{group}</option>)}
+                            </select>
+                        </label>
+                        <Button variant="primary" onClick={openAdd} isDisabled={canEdit !== true}>
+                            Add bookmark
+                        </Button>
                         <Button
-                            variant="plain"
+                            variant={editMode ? 'secondary' : 'plain'}
                             className="bookmark-edit-mode-toggle"
                             onClick={toggleEditMode}
-                            aria-label="Enable edit mode"
-                            aria-pressed="false"
-                            title="Enable edit mode"
+                            isDisabled={canEdit !== true}
+                            aria-label={editMode ? 'Disable edit mode' : 'Enable edit mode'}
+                            aria-pressed={editMode}
+                            title={editMode ? 'Disable edit mode' : 'Enable edit mode'}
                         >
                             <PencilIcon />
                         </Button>
                     </div>
-                ) : null}
+                </header>
 
                 {canEdit === false && (
                     <Alert isInline variant="info" title="Read-only mode" className="bookmarks-notice">
