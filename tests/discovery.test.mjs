@@ -82,6 +82,44 @@ test('does not recommend generic port 9100 unless the process looks web-related'
     assert.equal(candidates[1].selected, true);
 });
 
+test('classifies every process sharing a port conservatively', () => {
+    const candidates = buildDiscoveryCandidates([
+        {
+            port: 12345,
+            addresses: ['0.0.0.0'],
+            processes: ['nginx', 'sshd'],
+            process: 'nginx',
+            localOnly: false,
+        },
+        {
+            port: 12346,
+            addresses: ['0.0.0.0'],
+            processes: ['unknown-worker', 'nginx'],
+            process: 'unknown-worker',
+            localOnly: false,
+        },
+        {
+            port: 12347,
+            addresses: ['0.0.0.0'],
+            processes: ['nginx', 'cockpit-ws'],
+            process: 'nginx',
+            localOnly: false,
+        },
+    ], [], 'mini-pc.local');
+
+    assert.equal(candidates[0].supported, false);
+    assert.equal(candidates[0].reason, 'Known non-web/system listener');
+    assert.equal(candidates[0].selected, false);
+
+    assert.equal(candidates[1].supported, true);
+    assert.equal(candidates[1].likelyWeb, true);
+    assert.equal(candidates[1].selected, true);
+
+    assert.equal(candidates[2].supported, false);
+    assert.equal(candidates[2].reason, 'Cockpit itself');
+    assert.equal(candidates[2].selected, false);
+});
+
 test('marks already-bookmarked ports and leaves unknown protocols unselected', () => {
     const candidates = buildDiscoveryCandidates([
         { port: 3000, addresses: ['0.0.0.0'], processes: ['grafana-server'], process: 'grafana-server', localOnly: false },
