@@ -19,7 +19,7 @@ The project follows semantic versioning where practical.
 - Live configuration reload through Cockpit's file watch API.
 - Modal-local write errors for editor, move, delete, settings, import, and history actions.
 - Host-local **Discover services** workflow that inspects listening TCP sockets with `ss`, classifies likely web services, prevents obvious duplicate port additions, and presents a review dialog before writing bookmarks.
-- Discovery helper tests covering socket parsing, duplicate detection, safe defaults, ambiguous port handling, and non-web listener exclusions.
+- Discovery helper tests covering socket parsing, duplicate detection, safe defaults, ambiguous port handling, multi-process listener classification, and non-web listener exclusions.
 
 ### Changed
 
@@ -29,7 +29,10 @@ The project follows semantic versioning where practical.
 - Favorite bookmarks remain visible in their original group in addition to the Favorites section.
 - Discovered bookmarks are added under the `Discovered` group in one privileged atomic update/history snapshot.
 - Discovery no longer treats generic TCP port 9100 as web by port number alone; web-like process detection is required before it is recommended.
+- Discovery evaluates every reported process sharing a listening port before deciding whether it is safe to recommend.
+- Stable bookmark IDs are authoritative mutation targets; if an externally changed bookmark ID disappears, edit/delete/move actions fail safely instead of falling back to a lookalike bookmark.
 - Package and lockfile version metadata are aligned to `0.5.0`.
+- Build watch mode refreshes copied static files such as `manifest.json`, and Makefile source dependency tracking now covers nested files/directories and additions/deletions.
 
 ### Reliability and compatibility
 
@@ -37,6 +40,7 @@ The project follows semantic versioning where practical.
 - External JSON file changes refresh the displayed configuration without replacing unsaved modal draft fields.
 - Existing privileged `cockpit.file().modify()` writes and history conflict protection remain in place.
 - Service discovery does not scan the LAN and does not write anything until the administrator confirms selected candidates.
+- CI includes regression checks for recursive Makefile rebuild invalidation and development-watch static-file refresh.
 - Whole-card navigation semantics were reviewed. Native anchor-style middle-click/context-menu behavior remains a documented follow-up rather than a v0.5 release blocker.
 
 ## [0.4.0] - 2026-08-22
