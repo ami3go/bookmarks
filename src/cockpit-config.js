@@ -8,7 +8,12 @@ import {
 } from './bookmarks.js';
 
 export function emptyConfiguration() {
-    return { ...DEFAULT_CONFIG, services: [], history: [] };
+    return {
+        ...DEFAULT_CONFIG,
+        groupOrder: [],
+        services: [],
+        history: [],
+    };
 }
 
 export function configurationFromContent(content) {
@@ -74,7 +79,8 @@ export async function modifyConfiguration(transform, action) {
         const newContent = await file.modify(oldContent => {
             const current = configurationFromContent(oldContent);
             const next = transform(current);
-            return withHistory(current, next, action);
+            const actionText = typeof action === 'function' ? action(current, next) : action;
+            return withHistory(current, next, actionText);
         });
         return normalizeConfig(newContent);
     } finally {
