@@ -80,6 +80,11 @@ function loadCollapsedGroups() {
     }
 }
 
+function typingTarget(target) {
+    return target instanceof HTMLElement &&
+        (target.matches('input, textarea, select') || target.isContentEditable);
+}
+
 export const Application = () => {
     const [config, setConfig] = useState(DEFAULT_CONFIG);
     const [query, setQuery] = useState('');
@@ -196,6 +201,55 @@ export const Application = () => {
             // Local storage is an optional convenience; the dashboard still works without it.
         }
     }, [collapsedGroups]);
+
+    useEffect(() => {
+        const managementOpen = Boolean(editor || deleteTarget || settingsOpen || importCandidate || historyOpen);
+        const handleKeyboard = event => {
+            if (managementOpen)
+                return;
+
+            const isTyping = typingTarget(event.target);
+            if (event.key === '/' && !isTyping) {
+                const search = document.querySelector('.bookmarks-search input');
+                if (search) {
+                    event.preventDefault();
+                    search.focus();
+                    search.select?.();
+                }
+                return;
+            }
+
+            if (event.key === 'Escape' && query) {
+                event.preventDefault();
+                setQuery('');
+                document.querySelector('.bookmarks-search input')?.focus();
+                return;
+            }
+
+            if (isTyping || !['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(event.key))
+                return;
+
+            const cards = [...document.querySelectorAll('.bookmark-card')]
+                .filter(card => card instanceof HTMLElement && card.offsetParent !== null);
+            if (cards.length === 0)
+                return;
+
+            const active = document.activeElement;
+            const activeIndex = cards.indexOf(active);
+            const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight';
+            if (activeIndex === -1 && active !== document.body && !active?.matches?.('.bookmarks-page'))
+                return;
+
+            event.preventDefault();
+            const nextIndex = activeIndex === -1
+                ? (forward ? 0 : cards.length - 1)
+                : (activeIndex + (forward ? 1 : -1) + cards.length) % cards.length;
+            cards[nextIndex].focus();
+        };
+
+        document.addEventListener('keydown', handleKeyboard);
+        return () => document.removeEventListener('keydown', handleKeyboard);
+    }, [query, editor, deleteTarget, settingsOpen, importCandidate, historyOpen]);
 
     const groups = useMemo(
         () => normalizeGroupOrder(config.services, config.groupOrder),
@@ -590,13 +644,15 @@ export const Application = () => {
                         {config.subtitle && <p className="bookmarks-subtitle">{config.subtitle}</p>}
                     </div>
                     <div className="bookmarks-header-actions">
-                        <SearchInput
-                            aria-label="Search bookmarks"
-                            placeholder="Search bookmarks…"
-                            value={query}
-                            onChange={(_event, value) => setQuery(value)}
-                            onClear={() => setQuery('')}
-                        />
+                        <div className="bookmarks-search">
+                            <SearchInput
+                                aria-label="Search bookmarks"
+                                placeholder="Search bookmarks…"
+                                value={query}
+                                onChange={(_event, value) => setQuery(value)}
+                                onClear={() => setQuery('')}
+                            />
+                        </div>
                         <label className="bookmarks-group-filter">
                             <span className="sr-only">Filter by group</span>
                             <select value={groupFilter} onChange={event => setGroupFilter(event.target.value)}>
