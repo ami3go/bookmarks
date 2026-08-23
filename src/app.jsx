@@ -18,6 +18,7 @@ import {
     EMPTY_BOOKMARK,
     ICON_PRESETS,
     MAX_CONFIG_SIZE,
+    OPEN_MODES,
     allowedUrl,
     bookmarkWithFavorite,
     duplicateWarnings,
@@ -468,7 +469,10 @@ export const Application = () => {
     };
 
     const openService = service => {
-        window.open(service.resolvedUrl, '_blank', 'noopener,noreferrer');
+        if (service.openMode === 'same-tab')
+            window.open(service.resolvedUrl, '_top');
+        else
+            window.open(service.resolvedUrl, '_blank', 'noopener,noreferrer');
     };
 
     const selectService = service => {
@@ -791,6 +795,7 @@ export const Application = () => {
                                                 const selectionKey = serviceSelectionKey(service);
                                                 const isSelected = editMode && selectedBookmark === selectionKey;
                                                 const isDragging = dragSource?.sourceIndex === service.sourceIndex;
+                                                const opensSameTab = service.openMode === 'same-tab';
 
                                                 return (
                                                     <Card
@@ -801,7 +806,7 @@ export const Application = () => {
                                                         draggable={!isFavorites && editMode && canEdit === true && !saving}
                                                         aria-label={editMode
                                                             ? `${isFavorites ? 'Select' : 'Select for reordering'} ${service.name || 'service'}`
-                                                            : `Open ${service.name || 'service'} in a new tab`}
+                                                            : `Open ${service.name || 'service'} in ${opensSameTab ? 'the same tab' : 'a new tab'}`}
                                                         aria-pressed={editMode ? isSelected : undefined}
                                                         onClick={() => {
                                                             if (editMode && canEdit === true)
@@ -1014,6 +1019,21 @@ export const Application = () => {
                                     )}
                                 </div>
                             )}
+                        </FormGroup>
+                        <FormGroup label="Open behavior" fieldId="bookmark-open-mode">
+                            <select
+                                id="bookmark-open-mode"
+                                value={draft.openMode}
+                                onChange={event => updateDraft('openMode', event.target.value)}
+                                style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
+                            >
+                                {OPEN_MODES.map(mode => (
+                                    <option value={mode} key={mode}>
+                                        {mode === 'same-tab' ? 'Same tab' : 'New tab'}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="bookmark-field-help">New tab is the default for existing bookmarks.</div>
                         </FormGroup>
                         <FormGroup label="Description" fieldId="bookmark-description">
                             <TextArea
