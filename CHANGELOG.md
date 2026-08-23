@@ -4,7 +4,7 @@ All notable changes to Cockpit Bookmarks are documented here.
 
 The project follows semantic versioning where practical.
 
-## [0.5.0] - Unreleased
+## [0.5.0] - 2026-08-23
 
 ### Added
 
@@ -34,13 +34,15 @@ The project follows semantic versioning where practical.
 - Stable bookmark IDs are authoritative mutation targets; if an externally changed bookmark ID disappears, edit/delete/move actions fail safely instead of falling back to a lookalike bookmark.
 - Package and lockfile version metadata are aligned to `0.5.0`.
 - Build watch mode refreshes copied static files such as `manifest.json`, and Makefile source dependency tracking now covers nested files/directories and additions/deletions.
-- When the header is hidden, administrators retain a compact Edit-mode control and the full header is temporarily shown while Edit mode is active so visibility settings can always be restored.
+- Header, title, and search visibility are independent. Group filtering, Add bookmark, and Edit mode controls remain available when header/title content is hidden.
+- Page visibility checkboxes preview their effect immediately while Page settings is open; Save settings remains the persistence point.
+- Native browser dropdown controls use explicit system-aware theming so option text remains readable in Cockpit dark mode.
 
 ### Reliability and compatibility
 
 - Existing v0.4 JSON configurations continue to normalize without `displayMode`, `groupOrder`, `favorite`, `openMode`, `showHeader`, `showTitle`, or `showSearch` fields.
 - Visibility settings are included in import/export and History snapshots; legacy History snapshots restore page elements as visible.
-- Hidden header/search states clear inaccessible search/group filters when leaving Edit mode so no invisible filter remains active.
+- Hiding Search clears any active text query so an invisible search filter cannot remain active; hiding Header or Title does not alter the selected group filter.
 - External JSON file changes refresh the displayed configuration without replacing unsaved modal draft fields.
 - Existing privileged `cockpit.file().modify()` writes and history conflict protection remain in place.
 - Service discovery does not scan the LAN and does not write anything until the administrator confirms selected candidates.
