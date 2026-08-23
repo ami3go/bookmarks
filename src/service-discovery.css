@@ -1,8 +1,8 @@
-#cockpit-bookmarks-service-discovery {
+.bookmarks-discovery-floating {
     position: fixed;
     right: 1.25rem;
     bottom: 1.25rem;
-    z-index: 300;
+    z-index: 350;
 }
 
 .bookmarks-discovery-launcher {
@@ -87,7 +87,7 @@
 }
 
 @media (max-width: 720px) {
-    #cockpit-bookmarks-service-discovery {
+    .bookmarks-discovery-floating {
         right: 1rem;
         bottom: 1rem;
     }
