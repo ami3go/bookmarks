@@ -23,7 +23,7 @@ function candidateStatus(candidate) {
     return 'Recommended';
 }
 
-export function ServiceDiscovery({ visible = true }) {
+export function ServiceDiscovery({ visible = true, onOpenChange }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -35,6 +35,10 @@ export function ServiceDiscovery({ visible = true }) {
         () => candidates.filter(candidate => candidate.selected && candidate.supported && !candidate.alreadyBookmarked).length,
         [candidates]
     );
+
+    useEffect(() => {
+        onOpenChange?.(open);
+    }, [open, onOpenChange]);
 
     useEffect(() => {
         if (!visible && open && !saving)
