@@ -41,9 +41,25 @@ test('normalizes legacy configurations without new fields', () => {
     assert.equal(config.title, DEFAULT_CONFIG.title);
     assert.equal(config.eyebrow, 'Mini PC');
     assert.equal(config.showEyebrow, true);
+    assert.equal(config.showHeader, true);
+    assert.equal(config.showTitle, true);
+    assert.equal(config.showSearch, true);
     assert.equal(config.displayMode, 'cards');
     assert.deepEqual(config.groupOrder, []);
     assert.deepEqual(config.history, []);
+});
+
+test('normalizes explicit page visibility settings', () => {
+    const config = normalizeConfig({
+        showHeader: false,
+        showTitle: false,
+        showSearch: false,
+        services: [],
+    });
+
+    assert.equal(config.showHeader, false);
+    assert.equal(config.showTitle, false);
+    assert.equal(config.showSearch, false);
 });
 
 test('normalizes supported display modes and rejects unknown modes', () => {
@@ -190,9 +206,12 @@ test('moves services without mutating the input array', () => {
     assert.deepEqual(services, ['a', 'b', 'c']);
 });
 
-test('records and restores configuration history including display and group order', () => {
+test('records and restores configuration history including page visibility', () => {
     const current = normalizeConfig({
         title: 'Before',
+        showHeader: true,
+        showTitle: true,
+        showSearch: true,
         displayMode: 'cards',
         groupOrder: ['Storage', 'Monitoring'],
         services: [
@@ -203,6 +222,9 @@ test('records and restores configuration history including display and group ord
     const next = {
         ...current,
         title: 'After',
+        showHeader: false,
+        showTitle: false,
+        showSearch: false,
         displayMode: 'compact',
         groupOrder: ['Monitoring', 'Storage'],
     };
@@ -211,19 +233,48 @@ test('records and restores configuration history including display and group ord
     assert.equal(changed.history.length, 1);
     assert.equal(changed.history[0].action, 'Changed page layout');
     assert.equal(changed.history[0].config.title, 'Before');
+    assert.equal(changed.history[0].config.showHeader, true);
+    assert.equal(changed.history[0].config.showTitle, true);
+    assert.equal(changed.history[0].config.showSearch, true);
     assert.equal(changed.history[0].config.displayMode, 'cards');
     assert.deepEqual(changed.history[0].config.groupOrder, ['Storage', 'Monitoring']);
 
     const restored = restoreHistoryEntry(changed, changed.history[0]);
     assert.equal(restored.title, 'Before');
+    assert.equal(restored.showHeader, true);
+    assert.equal(restored.showTitle, true);
+    assert.equal(restored.showSearch, true);
     assert.equal(restored.displayMode, 'cards');
     assert.deepEqual(restored.groupOrder, ['Storage', 'Monitoring']);
     assert.equal(restored.services[0].name, 'One');
 });
 
-test('normalizes imported bookmarks and preserves group order and service metadata', () => {
+test('old history snapshots restore page elements as visible', () => {
+    const current = normalizeConfig({
+        showHeader: false,
+        showTitle: false,
+        showSearch: false,
+        services: [],
+        history: [],
+    });
+    const restored = restoreHistoryEntry(current, {
+        config: {
+            title: 'Legacy snapshot',
+            services: [],
+        },
+    });
+
+    assert.equal(restored.showHeader, true);
+    assert.equal(restored.showTitle, true);
+    assert.equal(restored.showSearch, true);
+});
+
+test('normalizes imported bookmarks and preserves visibility, group order and service metadata', () => {
     const imported = normalizeImportedConfig({
         title: 'Imported',
+        showHeader: false,
+        showTitle: true,
+        showSearch: false,
         displayMode: 'compact',
         groupOrder: ['Apps', 'Monitoring'],
         services: [
@@ -233,6 +284,9 @@ test('normalizes imported bookmarks and preserves group order and service metada
     }, 'mini-pc');
 
     assert.equal(imported.title, 'Imported');
+    assert.equal(imported.showHeader, false);
+    assert.equal(imported.showTitle, true);
+    assert.equal(imported.showSearch, false);
     assert.equal(imported.displayMode, 'compact');
     assert.deepEqual(imported.groupOrder, ['Apps', 'Monitoring']);
     assert.ok(imported.services[1].id);

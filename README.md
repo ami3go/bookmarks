@@ -24,6 +24,7 @@ React, PatternFly, Node.js, and esbuild are build-time dependencies only. The in
 - Favorites section for pinned bookmarks
 - search by name, description, group, URL, or tags
 - filter by group
+- optional header, title, and search bar visibility
 - keyboard shortcuts: `/` focuses search, arrow keys move between visible cards, `Enter` opens/selects, `Esc` clears search
 - per-bookmark open behavior: new tab or same tab
 - `{host}` substitution for the Cockpit host name/IP address
@@ -36,6 +37,7 @@ Administrators can manage bookmarks directly from Cockpit:
 - delete with confirmation
 - pencil **Edit mode** keeps management controls hidden by default
 - edit mode automatically locks after two minutes of inactivity
+- configure header, title, and search-bar visibility from Page settings
 - compact floating three-dot card action menu
 - reorder bookmarks with drag-and-drop or Move up / Move down
 - explicitly reorder groups
@@ -72,6 +74,7 @@ HTTP/HTTPS detection is intentionally conservative. Unknown protocols are not se
 
 - edit page title, subtitle, and eyebrow text
 - optionally hide the eyebrow
+- optionally hide the full header, title, or search bar
 - standard / compact display density
 - explicit `groupOrder`
 - live reload when `/etc/cockpit/cockpit-bookmarks.json` changes externally
@@ -300,7 +303,19 @@ GitHub Actions runs on pull requests and pushes to `main`. CI performs:
 
 The pencil button controls Edit mode. While Edit mode is active, management actions become available, including Page settings, JSON import/export, History, group ordering, card actions, and service discovery.
 
+If the header is disabled, administrators still see a compact pencil control. Entering Edit mode temporarily reveals the header so Page settings remain reachable and the header can always be re-enabled.
+
 Users without administrator privileges can browse and open bookmarks but cannot modify the system configuration.
+
+## Page visibility
+
+Open **Edit mode → Page settings → Visible page elements** to control:
+
+- **Show header** — hides the complete top header in normal browse mode
+- **Show title** — hides only the main page title while leaving other enabled header content available
+- **Show search bar** — hides the bookmark text search while keeping the group filter available
+
+All three options default to enabled for existing configurations. When a hidden header or search bar would make a filter inaccessible, the application clears that hidden search/group filter when Edit mode closes so bookmarks are not left filtered by controls the user cannot see.
 
 ## Bookmark fields
 
@@ -333,6 +348,9 @@ Example:
   "subtitle": "Services hosted on this mini PC",
   "eyebrow": "Mini PC",
   "showEyebrow": true,
+  "showHeader": true,
+  "showTitle": true,
+  "showSearch": true,
   "displayMode": "compact",
   "groupOrder": ["Apps", "Monitoring"],
   "services": [
@@ -350,7 +368,7 @@ Example:
 }
 ```
 
-`id`, `displayMode`, `groupOrder`, `eyebrow`, `showEyebrow`, `tags`, `favorite`, and `openMode` are optional for manually created configurations. The application also maintains a top-level `history` array after UI changes; it contains up to 10 previous configuration snapshots.
+`id`, `displayMode`, `groupOrder`, `eyebrow`, `showEyebrow`, `showHeader`, `showTitle`, `showSearch`, `tags`, `favorite`, and `openMode` are optional for manually created configurations. Missing visibility fields default to `true`. The application also maintains a top-level `history` array after UI changes; it contains up to 10 previous configuration snapshots.
 
 `{host}` is replaced in the browser with the hostname or IP address used to open Cockpit. IPv6 hosts are bracketed automatically. Only absolute `http://` and `https://` targets are accepted.
 
@@ -396,6 +414,8 @@ cockpit-bookmarks/
 │   ├── management-dialogs.jsx
 │   ├── management-dialogs.css
 │   ├── manifest.json
+│   ├── native-controls.css
+│   ├── page-visibility.css
 │   ├── service-discovery.jsx
 │   └── service-discovery.css
 ├── tests/
