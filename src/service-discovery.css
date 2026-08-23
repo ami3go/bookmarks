@@ -2,7 +2,7 @@
     position: fixed;
     right: 1.25rem;
     bottom: 1.25rem;
-    z-index: 9000;
+    z-index: 300;
 }
 
 .bookmarks-discovery-launcher {
