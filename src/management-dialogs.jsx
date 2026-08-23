@@ -53,6 +53,11 @@ export function ManagementDialogs({
     config,
     restoreHistory,
 }) {
+    const updateSetting = (field, value) => {
+        clearWriteError('settings');
+        setSettingsDraft(current => ({ ...current, [field]: value }));
+    };
+
     return (
         <>
             <Modal isOpen={editor !== null} onClose={closeEditor} variant="medium">
@@ -231,8 +236,7 @@ export function ManagementDialogs({
                                 id="settings-title"
                                 value={settingsDraft.title}
                                 onChange={(_event, value) => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, title: value }));
+                                    updateSetting('title', value);
                                     setSettingsError('');
                                 }}
                                 validated={settingsError ? 'error' : 'default'}
@@ -243,20 +247,14 @@ export function ManagementDialogs({
                             <TextInput
                                 id="settings-subtitle"
                                 value={settingsDraft.subtitle}
-                                onChange={(_event, value) => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, subtitle: value }));
-                                }}
+                                onChange={(_event, value) => updateSetting('subtitle', value)}
                             />
                         </FormGroup>
                         <FormGroup label="Eyebrow" fieldId="settings-eyebrow">
                             <TextInput
                                 id="settings-eyebrow"
                                 value={settingsDraft.eyebrow}
-                                onChange={(_event, value) => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, eyebrow: value }));
-                                }}
+                                onChange={(_event, value) => updateSetting('eyebrow', value)}
                                 isDisabled={!settingsDraft.showEyebrow}
                             />
                         </FormGroup>
@@ -264,22 +262,50 @@ export function ManagementDialogs({
                             <input
                                 type="checkbox"
                                 checked={settingsDraft.showEyebrow}
-                                onChange={event => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, showEyebrow: event.target.checked }));
-                                }}
+                                onChange={event => updateSetting('showEyebrow', event.target.checked)}
                             />
                             <span>Show eyebrow above the page title</span>
                         </label>
+                        <FormGroup label="Visible page elements" fieldId="settings-show-header">
+                            <div className="bookmarks-visibility-options">
+                                <label className="bookmarks-checkbox">
+                                    <input
+                                        id="settings-show-header"
+                                        type="checkbox"
+                                        checked={settingsDraft.showHeader}
+                                        onChange={event => updateSetting('showHeader', event.target.checked)}
+                                    />
+                                    <span>Show header</span>
+                                </label>
+                                <label className="bookmarks-checkbox">
+                                    <input
+                                        id="settings-show-title"
+                                        type="checkbox"
+                                        checked={settingsDraft.showTitle}
+                                        onChange={event => updateSetting('showTitle', event.target.checked)}
+                                    />
+                                    <span>Show title</span>
+                                </label>
+                                <label className="bookmarks-checkbox">
+                                    <input
+                                        id="settings-show-search"
+                                        type="checkbox"
+                                        checked={settingsDraft.showSearch}
+                                        onChange={event => updateSetting('showSearch', event.target.checked)}
+                                    />
+                                    <span>Show search bar</span>
+                                </label>
+                            </div>
+                            <div className="bookmark-field-help">
+                                A hidden header is temporarily shown while Edit mode is active so administrators can always restore it.
+                            </div>
+                        </FormGroup>
                         <FormGroup label="Display density" fieldId="settings-display-mode">
                             <select
                                 id="settings-display-mode"
                                 className="bookmark-select"
                                 value={settingsDraft.displayMode}
-                                onChange={event => {
-                                    clearWriteError('settings');
-                                    setSettingsDraft(current => ({ ...current, displayMode: event.target.value }));
-                                }}
+                                onChange={event => updateSetting('displayMode', event.target.value)}
                             >
                                 {DISPLAY_MODES.map(mode => (
                                     <option value={mode} key={mode}>
