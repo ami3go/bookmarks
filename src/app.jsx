@@ -123,33 +123,40 @@ export const Application = () => {
     useEffect(() => {
         const file = window.cockpit.file(CONFIG_PATH, { syntax: CONFIG_SYNTAX, max_read_size: MAX_CONFIG_SIZE });
         let active = true;
+        const watch = file.watch((content, _tag, error) => {
+            if (!active)
+                return;
 
-        file.read()
-            .then(content => {
-                if (!active)
-                    return;
-
-                if (content === null) {
-                    setNotice({
-                        variant: 'info',
-                        text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
-                    });
-                    return;
-                }
-
-                setConfig(normalizeConfig(content));
-            })
-            .catch(error => {
-                if (!active)
-                    return;
+            if (error) {
                 setNotice({
                     variant: 'danger',
-                    text: `Could not load ${CONFIG_PATH}: ${window.cockpit.message(error)}`,
+                    text: `Could not monitor ${CONFIG_PATH}: ${window.cockpit.message(error)}`,
                 });
-            });
+                return;
+            }
+
+            if (content === null) {
+                setConfig({ ...DEFAULT_CONFIG, services: [], history: [] });
+                setNotice({
+                    variant: 'info',
+                    text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
+                });
+                return;
+            }
+
+            try {
+                setConfig(normalizeConfig(content));
+            } catch (loadError) {
+                setNotice({
+                    variant: 'danger',
+                    text: `Could not load ${CONFIG_PATH}: ${window.cockpit.message(loadError)}`,
+                });
+            }
+        });
 
         return () => {
             active = false;
+            watch.remove();
             file.close();
         };
     }, []);
