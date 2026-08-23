@@ -21,6 +21,7 @@ import {
     OPEN_MODES,
     allowedUrl,
     bookmarkWithFavorite,
+    bookmarkWithGroup,
     duplicateBookmark,
     duplicateWarnings,
     editableBookmark,
@@ -99,6 +100,8 @@ export const Application = () => {
     const [draft, setDraft] = useState(EMPTY_BOOKMARK);
     const [formErrors, setFormErrors] = useState({});
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [moveTarget, setMoveTarget] = useState(null);
+    const [moveGroupDraft, setMoveGroupDraft] = useState('Ungrouped');
     const [saving, setSaving] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [settingsDraft, setSettingsDraft] = useState({
@@ -176,7 +179,7 @@ export const Application = () => {
     }, [editMode]);
 
     useEffect(() => {
-        if (!editMode || editor || deleteTarget || settingsOpen || importCandidate || historyOpen)
+        if (!editMode || editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen)
             return undefined;
 
         let timer;
@@ -194,7 +197,7 @@ export const Application = () => {
             window.removeEventListener('pointerdown', resetTimer);
             window.removeEventListener('keydown', resetTimer);
         };
-    }, [editMode, editor, deleteTarget, settingsOpen, importCandidate, historyOpen]);
+    }, [editMode, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen]);
 
     useEffect(() => {
         try {
@@ -205,7 +208,7 @@ export const Application = () => {
     }, [collapsedGroups]);
 
     useEffect(() => {
-        const managementOpen = Boolean(editor || deleteTarget || settingsOpen || importCandidate || historyOpen);
+        const managementOpen = Boolean(editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen);
         const handleKeyboard = event => {
             if (managementOpen)
                 return;
@@ -251,7 +254,7 @@ export const Application = () => {
 
         document.addEventListener('keydown', handleKeyboard);
         return () => document.removeEventListener('keydown', handleKeyboard);
-    }, [query, editor, deleteTarget, settingsOpen, importCandidate, historyOpen]);
+    }, [query, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen]);
 
     const groups = useMemo(
         () => normalizeGroupOrder(config.services, config.groupOrder),
@@ -450,6 +453,32 @@ export const Application = () => {
             setDeleteTarget(null);
             setSelectedBookmark(null);
         }, `Deleted ${deleteTarget?.service?.name || 'bookmark'}`);
+    };
+
+    const openMoveToGroup = service => {
+        if (!editMode || canEdit !== true)
+            return;
+        setSelectedBookmark(serviceSelectionKey(service));
+        setMoveTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
+        setMoveGroupDraft(serviceGroup(service));
+    };
+
+    const moveBookmarkToGroup = () => {
+        if (!moveTarget || !editMode)
+            return;
+
+        const destination = moveGroupDraft || 'Ungrouped';
+        modifyConfig(current => {
+            const index = findBookmarkIndex(current.services, moveTarget);
+            if (index === -1)
+                throw new Error('This bookmark was changed or removed. Reload the page and try again.');
+            const updatedServices = [...current.services];
+            updatedServices[index] = bookmarkWithGroup(updatedServices[index], destination);
+            return { ...current, services: updatedServices };
+        }, `Bookmark moved to ${destination}.`, () => {
+            setMoveTarget(null);
+            setSelectedBookmark(null);
+        }, `Moved ${moveTarget.service.name || 'bookmark'} to ${destination}`);
     };
 
     const toggleFavorite = service => {
@@ -937,6 +966,17 @@ export const Application = () => {
                                                                                     className="bookmark-action-menu-item"
                                                                                     onClick={event => {
                                                                                         closeActionMenu(event);
+                                                                                        openMoveToGroup(service);
+                                                                                    }}
+                                                                                    disabled={saving}
+                                                                                >
+                                                                                    Move to group…
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="bookmark-action-menu-item"
+                                                                                    onClick={event => {
+                                                                                        closeActionMenu(event);
                                                                                         moveWithinGroup(service, -1);
                                                                                     }}
                                                                                     disabled={!canMoveUp || saving}
@@ -1120,6 +1160,36 @@ export const Application = () => {
                         {saving ? 'Saving…' : (editor?.mode === 'edit' ? 'Save changes' : 'Add bookmark')}
                     </Button>
                     <Button variant="link" onClick={closeEditor} isDisabled={saving}>Cancel</Button>
+                </ModalFooter>
+            </Modal>
+
+            <Modal isOpen={moveTarget !== null} onClose={() => !saving && setMoveTarget(null)} variant="small">
+                <ModalHeader title="Move bookmark to group" />
+                <ModalBody>
+                    {moveTarget && (
+                        <FormGroup label={`Destination for ${moveTarget.service.name || 'bookmark'}`} fieldId="move-bookmark-group">
+                            <select
+                                id="move-bookmark-group"
+                                value={moveGroupDraft}
+                                onChange={event => setMoveGroupDraft(event.target.value)}
+                                style={{ width: '100%', minHeight: '2.25rem', padding: '0.35rem 0.65rem' }}
+                            >
+                                {[...new Set(['Ungrouped', ...groups])].map(group => (
+                                    <option value={group} key={group}>{group}</option>
+                                ))}
+                            </select>
+                        </FormGroup>
+                    )}
+                </ModalBody>
+                <ModalFooter>
+                    <Button
+                        variant="primary"
+                        onClick={moveBookmarkToGroup}
+                        isDisabled={saving || !editMode || !moveTarget || serviceGroup(moveTarget.service) === moveGroupDraft}
+                    >
+                        {saving ? 'Moving…' : 'Move'}
+                    </Button>
+                    <Button variant="link" onClick={() => setMoveTarget(null)} isDisabled={saving}>Cancel</Button>
                 </ModalFooter>
             </Modal>
 
