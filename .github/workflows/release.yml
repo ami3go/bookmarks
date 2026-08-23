@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -31,8 +33,8 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-      - name: Build release archive
-        run: make release
+      - name: Build release artifacts
+        run: make release-all
 
       - name: Publish GitHub release
         env:
@@ -42,17 +44,18 @@ jobs:
           set -euo pipefail
 
           VERSION="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          DEB_REVISION="$(awk '/^DEB_REVISION[[:space:]]*\?=/{print $3; exit}' Makefile)"
           TAG="v${VERSION}"
           ARCHIVE="release/cockpit-bookmarks-${VERSION}.tar.gz"
-          CHECKSUM="${ARCHIVE}.sha256"
+          ARCHIVE_CHECKSUM="${ARCHIVE}.sha256"
+          DEB="release/cockpit-bookmarks_${VERSION}-${DEB_REVISION}_all.deb"
+          DEB_CHECKSUM="${DEB}.sha256"
 
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; refusing to overwrite it." >&2
-            exit 1
-          fi
-
+          test -n "$DEB_REVISION"
           test -s "$ARCHIVE"
-          sha256sum "$ARCHIVE" > "$CHECKSUM"
+          test -s "$DEB"
+          sha256sum "$ARCHIVE" > "$ARCHIVE_CHECKSUM"
+          sha256sum "$DEB" > "$DEB_CHECKSUM"
 
           awk -v version="$VERSION" '
             $0 ~ "^## \\[" version "\\]" { capture=1; next }
@@ -62,11 +65,41 @@ jobs:
 
           test -s release-notes.md
 
-          gh release create "$TAG" \
-            "${ARCHIVE}#Prebuilt Cockpit Bookmarks ${VERSION}" \
-            "${CHECKSUM}#SHA-256 checksum" \
-            --target "$GITHUB_SHA" \
-            --title "Cockpit Bookmarks ${TAG}" \
-            --notes-file release-notes.md
+          upload_if_missing() {
+            file="$1"
+            label="$2"
+            name="$(basename "$file")"
+            if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "$name"; then
+              echo "Release asset $name already exists; keeping it unchanged."
+            else
+              gh release upload "$TAG" "${file}#${label}"
+            fi
+          }
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # Existing releases may be augmented with packaging-only assets, but
+            # never rebuild a published application version from changed app inputs.
+            changed_app_inputs="$(git diff --name-only "$TAG" "$GITHUB_SHA" -- src package.json package-lock.json build.js examples)"
+            if [ -n "$changed_app_inputs" ]; then
+              echo "Release $TAG exists, but application inputs changed since the tag:" >&2
+              printf '%s\n' "$changed_app_inputs" >&2
+              echo "Bump the application version before publishing new release assets." >&2
+              exit 1
+            fi
+
+            upload_if_missing "$ARCHIVE" "Prebuilt Cockpit Bookmarks ${VERSION}"
+            upload_if_missing "$ARCHIVE_CHECKSUM" "Prebuilt archive SHA-256 checksum"
+            upload_if_missing "$DEB" "Debian/Ubuntu package ${VERSION}-${DEB_REVISION}"
+            upload_if_missing "$DEB_CHECKSUM" "Debian package SHA-256 checksum"
+          else
+            gh release create "$TAG" \
+              "${ARCHIVE}#Prebuilt Cockpit Bookmarks ${VERSION}" \
+              "${ARCHIVE_CHECKSUM}#Prebuilt archive SHA-256 checksum" \
+              "${DEB}#Debian/Ubuntu package ${VERSION}-${DEB_REVISION}" \
+              "${DEB_CHECKSUM}#Debian package SHA-256 checksum" \
+              --target "$GITHUB_SHA" \
+              --title "Cockpit Bookmarks ${TAG}" \
+              --notes-file release-notes.md
+          fi
 
           gh release view "$TAG" --json tagName,isDraft,isPrerelease,assets,url
