@@ -8,9 +8,22 @@
 
 /*
  * Native select/datalist popups are painted by the browser rather than
- * PatternFly. Keep their system colors synchronized with the Cockpit theme
- * so a dark-theme text color is never rendered on a light native popup.
+ * PatternFly. Some browsers keep a light popup surface even when the page is
+ * in a dark color scheme, and may ignore option background colors. In that
+ * case CanvasText can otherwise resolve to a light value and become unreadable
+ * on the browser-owned white popup.
+ *
+ * Keep the closed controls themed by Cockpit/PatternFly, but force the native
+ * popup hosts to use a light UA color scheme. This guarantees a readable dark
+ * CanvasText fallback on light browser-owned popup surfaces in both Cockpit
+ * themes.
  */
+.bookmarks-group-filter select,
+.bookmark-select,
+#bookmark-group {
+    color-scheme: light;
+}
+
 .bookmarks-group-filter select option,
 .bookmark-select option,
 #bookmark-group-options option {
