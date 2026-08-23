@@ -3,6 +3,7 @@ export const MAX_CONFIG_SIZE = 1048576;
 export const HISTORY_LIMIT = 10;
 export const EDIT_MODE_TIMEOUT_MS = 120000;
 export const DISPLAY_MODES = ['cards', 'compact'];
+export const OPEN_MODES = ['new-tab', 'same-tab'];
 
 export const DEFAULT_CONFIG = {
     title: 'Cockpit Bookmarks',
@@ -22,6 +23,7 @@ export const EMPTY_BOOKMARK = {
     group: '',
     icon: '',
     tags: '',
+    openMode: 'new-tab',
 };
 
 export const ICON_PRESETS = ['🔗', '📊', '🖥️', '📦', '🗄️', '🌐', '🛠️', '📁', '🔒', '🎛️'];
@@ -55,6 +57,10 @@ export function allowedUrl(url) {
 
 export function normalizeDisplayMode(value) {
     return DISPLAY_MODES.includes(value) ? value : DEFAULT_CONFIG.displayMode;
+}
+
+export function normalizeOpenMode(value) {
+    return OPEN_MODES.includes(value) ? value : 'new-tab';
 }
 
 export function serviceGroup(service) {
@@ -149,6 +155,7 @@ export function editableBookmark(service = EMPTY_BOOKMARK) {
         group: String(service.group || ''),
         icon: String(service.icon || ''),
         tags: tagsArray(service.tags).join(', '),
+        openMode: normalizeOpenMode(service.openMode),
     };
 }
 
@@ -174,6 +181,12 @@ export function storedBookmark(draft, original = {}) {
     else
         delete bookmark.tags;
 
+    const openMode = normalizeOpenMode(draft.openMode);
+    if (openMode === 'same-tab')
+        bookmark.openMode = openMode;
+    else
+        delete bookmark.openMode;
+
     return bookmark;
 }
 
@@ -185,6 +198,8 @@ function comparableService(service) {
         group: String(service?.group || ''),
         icon: String(service?.icon || ''),
         tags: tagsArray(service?.tags).map(tag => tag.toLowerCase()).sort(),
+        favorite: service?.favorite === true,
+        openMode: normalizeOpenMode(service?.openMode),
     };
 }
 
@@ -246,6 +261,46 @@ export function duplicateWarnings(draft, services, target, hostname) {
         warnings.push('Another bookmark already uses this URL.');
 
     return warnings;
+}
+
+export function duplicateBookmark(service, services = []) {
+    const source = { ...service };
+    delete source.sourceIndex;
+    delete source.resolvedUrl;
+
+    const baseName = String(source.name || 'Bookmark').trim() || 'Bookmark';
+    const existingNames = new Set(services.map(item => String(item?.name || '').trim().toLowerCase()));
+    let name = `${baseName} copy`;
+    let counter = 2;
+    while (existingNames.has(name.toLowerCase())) {
+        name = `${baseName} copy ${counter}`;
+        counter += 1;
+    }
+
+    return {
+        ...source,
+        id: newBookmarkId(),
+        name,
+    };
+}
+
+export function bookmarkWithFavorite(service, favorite) {
+    const updated = { ...service };
+    if (favorite)
+        updated.favorite = true;
+    else
+        delete updated.favorite;
+    return updated;
+}
+
+export function bookmarkWithGroup(service, group) {
+    const updated = { ...service };
+    const normalizedGroup = String(group || '').trim();
+    if (normalizedGroup && normalizedGroup !== 'Ungrouped')
+        updated.group = normalizedGroup;
+    else
+        delete updated.group;
+    return updated;
 }
 
 export function moveService(services, fromIndex, toIndex) {
