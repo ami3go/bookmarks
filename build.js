@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { watch as watchFiles } from 'node:fs';
 import fs from 'node:fs/promises';
 import process from 'node:process';
 
@@ -8,6 +9,7 @@ const esbuild = esbuildModule.default ?? esbuildModule;
 
 const watch = process.argv.includes('--watch');
 const production = process.env.NODE_ENV === 'production';
+const STATIC_SOURCE_FILES = new Set(['manifest.json']);
 
 const html = `<!doctype html>
 <html lang="en">
@@ -62,8 +64,28 @@ await writeStaticFiles();
 
 if (watch) {
     await buildContext.watch();
+
+    let staticWrite = Promise.resolve();
+    const staticWatcher = watchFiles('src', (_eventType, filename) => {
+        if (!filename || !STATIC_SOURCE_FILES.has(filename.toString()))
+            return;
+
+        staticWrite = staticWrite
+            .catch(() => undefined)
+            .then(writeStaticFiles)
+            .then(() => console.log(`Updated static file: ${filename}`))
+            .catch(error => console.error(`Could not update ${filename}:`, error));
+    });
+
     console.log('Watching src/ for changes. Press Ctrl-C to stop.');
-    await new Promise(() => {});
+    await new Promise(resolve => {
+        process.once('SIGINT', resolve);
+        process.once('SIGTERM', resolve);
+    });
+
+    staticWatcher.close();
+    await staticWrite.catch(() => undefined);
+    await buildContext.dispose();
 } else {
     await buildContext.dispose();
 }
