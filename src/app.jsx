@@ -19,6 +19,7 @@ import {
     ICON_PRESETS,
     MAX_CONFIG_SIZE,
     allowedUrl,
+    bookmarkWithFavorite,
     duplicateWarnings,
     editableBookmark,
     expandUrl,
@@ -200,6 +201,10 @@ export const Application = () => {
         () => normalizeGroupOrder(config.services, config.groupOrder),
         [config.services, config.groupOrder]
     );
+    const hasFavorites = useMemo(
+        () => config.services.some(service => service?.favorite === true),
+        [config.services]
+    );
 
     useEffect(() => {
         if (groupFilter !== 'all' && !groups.includes(groupFilter))
@@ -208,13 +213,13 @@ export const Application = () => {
 
     useEffect(() => {
         setCollapsedGroups(current => {
-            const available = new Set(groups);
+            const available = new Set(hasFavorites ? ['Favorites', ...groups] : groups);
             const next = new Set([...current].filter(group => available.has(group)));
             if (next.size === current.size && [...next].every(group => current.has(group)))
                 return current;
             return next;
         });
-    }, [groups]);
+    }, [groups, hasFavorites]);
 
     const services = useMemo(() => {
         const needle = query.trim().toLowerCase();
@@ -247,6 +252,17 @@ export const Application = () => {
             .filter(group => result.has(group))
             .map(group => [group, result.get(group)]);
     }, [services, groups]);
+
+    const favoriteServices = useMemo(
+        () => services.filter(service => service.favorite === true),
+        [services]
+    );
+    const sections = useMemo(() => {
+        const normalSections = groupedServices.map(([name, items]) => ({ name, items, isFavorites: false }));
+        if (groupFilter === 'all' && favoriteServices.length > 0)
+            return [{ name: 'Favorites', items: favoriteServices, isFavorites: true }, ...normalSections];
+        return normalSections;
+    }, [favoriteServices, groupedServices, groupFilter]);
 
     const currentTarget = editor?.mode === 'edit' ? editor.target : null;
     const warnings = useMemo(
@@ -378,6 +394,23 @@ export const Application = () => {
             setDeleteTarget(null);
             setSelectedBookmark(null);
         }, `Deleted ${deleteTarget?.service?.name || 'bookmark'}`);
+    };
+
+    const toggleFavorite = service => {
+        if (!editMode || canEdit !== true)
+            return;
+
+        const target = { index: service.sourceIndex, service: runtimeFreeService(service) };
+        const nextFavorite = service.favorite !== true;
+        modifyConfig(current => {
+            const index = findBookmarkIndex(current.services, target);
+            if (index === -1)
+                throw new Error('This bookmark was changed or removed. Reload the page and try again.');
+            const updatedServices = [...current.services];
+            updatedServices[index] = bookmarkWithFavorite(updatedServices[index], nextFavorite);
+            return { ...current, services: updatedServices };
+        }, nextFavorite ? 'Bookmark added to Favorites.' : 'Bookmark removed from Favorites.', undefined,
+        `${nextFavorite ? 'Favorited' : 'Unfavorited'} ${service.name || 'bookmark'}`);
     };
 
     const openService = service => {
@@ -640,10 +673,10 @@ export const Application = () => {
                     </div>
                 ) : (
                     <div className="bookmark-groups">
-                        {groupedServices.map(([group, groupServices]) => {
+                        {sections.map(({ name: group, items: groupServices, isFavorites }) => {
                             const isCollapsed = collapsedGroups.has(group) && !query.trim();
                             return (
-                                <section className="bookmark-group-section" key={group} aria-labelledby={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+                                <section className={`bookmark-group-section${isFavorites ? ' is-favorites' : ''}`} key={group} aria-labelledby={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
                                     <div className="bookmark-group-heading">
                                         <Button
                                             variant="plain"
@@ -656,7 +689,7 @@ export const Application = () => {
                                         </Button>
                                         <h2 id={`group-${group.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>{group}</h2>
                                         <span>{groupServices.length}</span>
-                                        {editMode && canEdit === true && groups.length > 1 && (
+                                        {editMode && canEdit === true && !isFavorites && groups.length > 1 && (
                                             <div
                                                 style={{ display: 'flex', gap: '0.15rem', marginLeft: 'auto' }}
                                                 onClick={event => event.stopPropagation()}
@@ -692,13 +725,13 @@ export const Application = () => {
                                             } : undefined}
                                         >
                                             {groupServices.map(service => {
-                                                const siblingIndexes = config.services
+                                                const siblingIndexes = isFavorites ? [] : config.services
                                                     .map((item, index) => ({ item, index }))
                                                     .filter(({ item }) => serviceGroup(item) === serviceGroup(service))
                                                     .map(({ index }) => index);
                                                 const groupPosition = siblingIndexes.indexOf(service.sourceIndex);
-                                                const canMoveUp = groupPosition > 0;
-                                                const canMoveDown = groupPosition >= 0 && groupPosition < siblingIndexes.length - 1;
+                                                const canMoveUp = !isFavorites && groupPosition > 0;
+                                                const canMoveDown = !isFavorites && groupPosition >= 0 && groupPosition < siblingIndexes.length - 1;
                                                 const selectionKey = serviceSelectionKey(service);
                                                 const isSelected = editMode && selectedBookmark === selectionKey;
                                                 const isDragging = dragSource?.sourceIndex === service.sourceIndex;
@@ -709,9 +742,9 @@ export const Application = () => {
                                                         key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
                                                         role={editMode ? 'button' : 'link'}
                                                         tabIndex={0}
-                                                        draggable={editMode && canEdit === true && !saving}
+                                                        draggable={!isFavorites && editMode && canEdit === true && !saving}
                                                         aria-label={editMode
-                                                            ? `Select ${service.name || 'service'} for reordering`
+                                                            ? `${isFavorites ? 'Select' : 'Select for reordering'} ${service.name || 'service'}`
                                                             : `Open ${service.name || 'service'} in a new tab`}
                                                         aria-pressed={editMode ? isSelected : undefined}
                                                         onClick={() => {
@@ -730,7 +763,7 @@ export const Application = () => {
                                                             }
                                                         }}
                                                         onDragStart={event => {
-                                                            if (!editMode || canEdit !== true || saving) {
+                                                            if (isFavorites || !editMode || canEdit !== true || saving) {
                                                                 event.preventDefault();
                                                                 return;
                                                             }
@@ -741,14 +774,15 @@ export const Application = () => {
                                                         }}
                                                         onDragEnd={() => setDragSource(null)}
                                                         onDragOver={event => {
-                                                            if (editMode && dragSource && serviceGroup(dragSource) === serviceGroup(service)) {
+                                                            if (!isFavorites && editMode && dragSource && serviceGroup(dragSource) === serviceGroup(service)) {
                                                                 event.preventDefault();
                                                                 event.dataTransfer.dropEffect = 'move';
                                                             }
                                                         }}
                                                         onDrop={event => {
                                                             event.preventDefault();
-                                                            reorderBetween(dragSource, service);
+                                                            if (!isFavorites)
+                                                                reorderBetween(dragSource, service);
                                                             setDragSource(null);
                                                         }}
                                                     >
@@ -768,6 +802,7 @@ export const Application = () => {
                                                                         {service.icon || '↗'}
                                                                     </span>
                                                                     <span>{service.name || 'Unnamed service'}</span>
+                                                                    {service.favorite === true && <span aria-label="Favorite" title="Favorite">★</span>}
                                                                 </div>
                                                                 {editMode && canEdit === true && (
                                                                     <div
@@ -796,6 +831,17 @@ export const Application = () => {
                                                                                     disabled={saving}
                                                                                 >
                                                                                     Edit
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    className="bookmark-action-menu-item"
+                                                                                    onClick={event => {
+                                                                                        closeActionMenu(event);
+                                                                                        toggleFavorite(service);
+                                                                                    }}
+                                                                                    disabled={saving}
+                                                                                >
+                                                                                    {service.favorite === true ? '★ Remove from Favorites' : '☆ Add to Favorites'}
                                                                                 </button>
                                                                                 <button
                                                                                     type="button"
