@@ -1,21 +1,52 @@
-.bookmarks-update-notification {
-    position: fixed;
-    right: 1rem;
-    bottom: 1rem;
-    z-index: 1000;
-    width: min(32rem, calc(100vw - 2rem));
+.bookmarks-update-status {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2rem;
+    padding: 0.35rem 1rem;
+    background: rgba(115, 188, 247, 0.12);
+    border-bottom: 1px solid rgba(115, 188, 247, 0.45);
+    font-size: 0.82rem;
+    line-height: 1.25;
+    text-align: center;
 }
 
-.bookmarks-update-notification-body {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+.bookmarks-update-status-separator {
+    opacity: 0.6;
+}
+
+.bookmarks-update-status-link {
+    padding: 0;
+    color: var(--pf-t--global--color--brand--default, #06c);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.12em;
+}
+
+.bookmarks-update-status-link:hover {
+    text-decoration-thickness: 2px;
+}
+
+.bookmarks-update-status-link:focus-visible {
+    outline: 2px solid currentcolor;
+    outline-offset: 2px;
+    border-radius: 2px;
 }
 
 @media (max-width: 36rem) {
-    .bookmarks-update-notification {
-        right: 0.75rem;
-        bottom: 0.75rem;
-        width: calc(100vw - 1.5rem);
+    .bookmarks-update-status {
+        flex-wrap: wrap;
+        gap: 0.25rem 0.4rem;
+        padding-inline: 0.75rem;
     }
 }
