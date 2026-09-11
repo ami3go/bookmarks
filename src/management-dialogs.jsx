@@ -7,6 +7,7 @@ import { TextArea } from '@patternfly/react-core/dist/esm/components/TextArea/in
 import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput/index.js';
 
 import {
+    ACCENT_PRESETS,
     CONFIG_PATH,
     DISPLAY_MODES,
     ICON_PRESETS,
@@ -99,6 +100,20 @@ export function ManagementDialogs({
                                 </div>
                             )}
                         </FormGroup>
+                        <FormGroup label="Alternate addresses" fieldId="bookmark-endpoints">
+                            <TextArea
+                                id="bookmark-endpoints"
+                                value={draft.endpoints}
+                                onChange={(_event, value) => updateDraft('endpoints', value)}
+                                placeholder={'LAN | http://192.168.1.20:3000\nRemote | https://grafana.example.com'}
+                                resizeOrientation="vertical"
+                                validated={formErrors.endpoints ? 'error' : 'default'}
+                            />
+                            {formErrors.endpoints && <div className="bookmark-field-error">{formErrors.endpoints}</div>}
+                            <div className="bookmark-field-help">
+                                Optional. Add one address per line as <code>Label | URL</code>. The primary URL remains the default.
+                            </div>
+                        </FormGroup>
                         <FormGroup label="Open behavior" fieldId="bookmark-open-mode">
                             <select
                                 id="bookmark-open-mode"
@@ -113,6 +128,18 @@ export function ManagementDialogs({
                                 ))}
                             </select>
                             <div className="bookmark-field-help">New tab is the default for existing bookmarks.</div>
+                        </FormGroup>
+                        <FormGroup label="Availability" fieldId="bookmark-status-check">
+                            <label className="bookmarks-checkbox">
+                                <input
+                                    id="bookmark-status-check"
+                                    type="checkbox"
+                                    checked={draft.statusCheck !== false}
+                                    onChange={event => updateDraft('statusCheck', event.target.checked)}
+                                />
+                                <span>Check whether this service is reachable from the Cockpit host</span>
+                            </label>
+                            <div className="bookmark-field-help">Checks TCP reachability of the primary and alternate addresses. No HTTP credentials are sent.</div>
                         </FormGroup>
                         <FormGroup label="Description" fieldId="bookmark-description">
                             <TextArea
@@ -151,6 +178,23 @@ export function ManagementDialogs({
                                         key={icon}
                                     >
                                         {icon}
+                                    </button>
+                                ))}
+                            </div>
+                        </FormGroup>
+                        <FormGroup label="Card accent" fieldId="bookmark-accent">
+                            <div className="bookmark-accent-presets" aria-label="Card accent presets">
+                                {ACCENT_PRESETS.map(option => (
+                                    <button
+                                        type="button"
+                                        className={`bookmark-accent-choice accent-${option.value}${draft.accent === option.value ? ' is-selected' : ''}`}
+                                        onClick={() => updateDraft('accent', option.value)}
+                                        aria-label={`Use ${option.label} card accent`}
+                                        title={option.label}
+                                        key={option.value}
+                                    >
+                                        <span aria-hidden="true" />
+                                        {option.label}
                                     </button>
                                 ))}
                             </div>

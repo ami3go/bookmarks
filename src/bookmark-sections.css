@@ -4,6 +4,32 @@
     margin-left: auto;
 }
 
+.bookmarks-service-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 0 0 1rem;
+    padding: 0.45rem 0.75rem;
+    border-block: 1px solid var(--pf-t--global--border--color--default, rgba(127, 127, 127, 0.35));
+    font-size: 0.82rem;
+}
+
+.bookmarks-service-summary button {
+    padding: 0;
+    color: var(--pf-t--global--text--color--link--default, #06c);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+}
+
+.bookmarks-service-summary button:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
 .bookmarks-grid.is-compact {
     grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
     gap: 0.65rem;
@@ -34,4 +60,130 @@
 
 .bookmark-card.is-compact .bookmark-meta {
     margin-top: 0.5rem;
+}
+
+.bookmark-card.bookmark-accent-blue { box-shadow: inset 4px 0 var(--pf-t--global--color--brand--default, #06c); }
+.bookmark-card.bookmark-accent-green { box-shadow: inset 4px 0 var(--pf-t--global--color--status--success--default, #3e8635); }
+.bookmark-card.bookmark-accent-teal { box-shadow: inset 4px 0 #009596; }
+.bookmark-card.bookmark-accent-purple { box-shadow: inset 4px 0 #6753ac; }
+.bookmark-card.bookmark-accent-orange { box-shadow: inset 4px 0 var(--pf-t--global--color--status--warning--default, #f0ab00); }
+.bookmark-card.bookmark-accent-red { box-shadow: inset 4px 0 var(--pf-t--global--color--status--danger--default, #c9190b); }
+
+.bookmark-endpoint-picker {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.55rem;
+    font-size: 0.75rem;
+}
+
+.bookmark-endpoint-picker span {
+    opacity: 0.65;
+}
+
+.bookmark-endpoint-picker select {
+    min-width: 0;
+    max-width: 12rem;
+    padding: 0.15rem 1.5rem 0.15rem 0.35rem;
+    color: inherit;
+    background: transparent;
+    border: 1px solid currentcolor;
+    border-radius: 3px;
+    font: inherit;
+}
+
+.bookmark-service-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    opacity: 0.8;
+}
+
+.bookmark-service-status > span {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    background: currentcolor;
+}
+
+.bookmark-service-status.is-online { color: var(--pf-t--global--text--color--status--success--default, #3e8635); }
+.bookmark-service-status.is-offline { color: var(--pf-t--global--text--color--status--danger--default, #c9190b); }
+.bookmark-service-status.is-unknown { opacity: 0.55; }
+
+.bookmark-accent-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.bookmark-accent-choice {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.5rem;
+    color: inherit;
+    background: transparent;
+    border: 1px solid currentcolor;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.8rem;
+    opacity: 0.72;
+}
+
+.bookmark-accent-choice > span {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 2px;
+    background: currentcolor;
+}
+
+.bookmark-accent-choice.accent-none > span { background: transparent; border: 1px solid currentcolor; }
+.bookmark-accent-choice.accent-blue > span { color: #06c; }
+.bookmark-accent-choice.accent-green > span { color: #3e8635; }
+.bookmark-accent-choice.accent-teal > span { color: #009596; }
+.bookmark-accent-choice.accent-purple > span { color: #6753ac; }
+.bookmark-accent-choice.accent-orange > span { color: #f0ab00; }
+.bookmark-accent-choice.accent-red > span { color: #c9190b; }
+.bookmark-accent-choice:hover,
+.bookmark-accent-choice:focus-visible,
+.bookmark-accent-choice.is-selected { opacity: 1; }
+.bookmark-accent-choice.is-selected { outline: 2px solid currentcolor; outline-offset: 1px; }
+
+.bookmark-qr-dialog {
+    display: grid;
+    justify-items: center;
+    gap: 0.75rem;
+    text-align: center;
+}
+
+.bookmark-qr-label {
+    font-weight: 700;
+}
+
+.bookmark-qr-image {
+    width: min(17.5rem, 100%);
+    padding: 0.5rem;
+    background: white;
+    border-radius: 6px;
+}
+
+.bookmark-qr-image svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.bookmark-qr-dialog code {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+@media (max-width: 36rem) {
+    .bookmarks-service-summary {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
 }

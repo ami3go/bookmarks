@@ -26,7 +26,11 @@ React, PatternFly, Node.js, and esbuild are build-time dependencies only. The in
 - filter by group
 - optional header, title, and search bar visibility
 - keyboard shortcuts: `/` focuses search, arrow keys move between visible cards, `Enter` opens/selects, `Esc` clears search
-- per-bookmark open behavior: new tab or same tab
+- per-bookmark open behavior: new tab or same tab, with new tab as the default
+- multiple addresses per bookmark with a selectable primary/LAN/remote endpoint
+- host-side service reachability indicators plus an online/offline/unknown summary
+- user card menu with Open in new tab, Copy URL, and locally generated QR code
+- expanded icon presets and optional card accent presets
 - `{host}` substitution for the Cockpit host name/IP address
 
 ### Manage
@@ -407,10 +411,13 @@ All three options default to enabled for existing configurations and preview imm
 The editor supports:
 
 - `name` — required display name
-- `url` — required absolute `http://` or `https://` URL
+- `url` — required primary absolute `http://` or `https://` URL
+- `endpoints` — optional array of additional `{ label, url }` addresses; the primary `url` remains the default
 - `description` — optional secondary text
 - `group` — optional category
 - `icon` — optional emoji or text icon
+- `accent` — optional theme-safe card accent preset (`blue`, `green`, `teal`, `purple`, `orange`, or `red`)
+- `statusCheck` — optional boolean; defaults to enabled and can disable host-side reachability checks for a bookmark
 - `tags` — optional searchable metadata stored as an array
 - `openMode` — optional `same-tab`; omitted/default means new tab
 - `favorite` — optional boolean used for the Favorites section
