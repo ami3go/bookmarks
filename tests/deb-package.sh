@@ -2,7 +2,7 @@
 set -eu
 
 VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)"
-DEB_REVISION="${DEB_REVISION:-2}"
+DEB_REVISION="${DEB_REVISION:-3}"
 DEB_VERSION="${VERSION}-${DEB_REVISION}"
 DEB="release/cockpit-bookmarks_${DEB_VERSION}_all.deb"
 ARCHIVE="release/cockpit-bookmarks-${VERSION}.tar.gz"
@@ -12,6 +12,8 @@ fail() {
     echo "Debian package test failed: $*" >&2
     exit 1
 }
+
+sh -n packaging/local-apt-test.sh || fail "local APT test helper has invalid shell syntax"
 
 test -s "$DEB" || fail "missing $DEB"
 test -s "$ARCHIVE" || fail "missing $ARCHIVE"
