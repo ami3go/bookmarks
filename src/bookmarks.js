@@ -4,6 +4,15 @@ export const HISTORY_LIMIT = 10;
 export const EDIT_MODE_TIMEOUT_MS = 120000;
 export const DISPLAY_MODES = ['cards', 'compact'];
 export const OPEN_MODES = ['new-tab', 'same-tab'];
+export const ACCENT_PRESETS = [
+    { value: 'none', label: 'Default' },
+    { value: 'blue', label: 'Blue' },
+    { value: 'green', label: 'Green' },
+    { value: 'teal', label: 'Teal' },
+    { value: 'purple', label: 'Purple' },
+    { value: 'orange', label: 'Orange' },
+    { value: 'red', label: 'Red' },
+];
 
 export const DEFAULT_CONFIG = {
     title: 'Cockpit Bookmarks',
@@ -22,14 +31,20 @@ export const DEFAULT_CONFIG = {
 export const EMPTY_BOOKMARK = {
     name: '',
     url: '',
+    endpoints: '',
     description: '',
     group: '',
     icon: '',
+    accent: 'none',
     tags: '',
     openMode: 'new-tab',
+    statusCheck: true,
 };
 
-export const ICON_PRESETS = ['🔗', '📊', '🖥️', '📦', '🗄️', '🌐', '🛠️', '📁', '🔒', '🎛️'];
+export const ICON_PRESETS = [
+    '🔗', '🌐', '🖥️', '📊', '📈', '📦', '🗄️', '💾', '📁', '🔒',
+    '🛠️', '🎛️', '⚙️', '🏠', '☁️', '🧭', '🧪', '📡', '🎥', '🎵',
+];
 
 export const CONFIG_SYNTAX = {
     parse: JSON.parse,
@@ -56,6 +71,81 @@ export function allowedUrl(url) {
     } catch (_) {
         return false;
     }
+}
+
+export function normalizeAccent(value) {
+    const normalized = String(value || 'none').trim().toLowerCase();
+    return ACCENT_PRESETS.some(option => option.value === normalized) ? normalized : 'none';
+}
+
+export function normalizeEndpoints(value) {
+    if (!Array.isArray(value))
+        return [];
+
+    const result = [];
+    const seen = new Set();
+    value.forEach((entry, index) => {
+        const endpoint = typeof entry === 'string'
+            ? { label: `Address ${index + 1}`, url: entry }
+            : entry;
+        if (!endpoint || typeof endpoint !== 'object')
+            return;
+        const url = String(endpoint.url || '').trim();
+        if (!url)
+            return;
+        const key = url.toLowerCase();
+        if (seen.has(key))
+            return;
+        seen.add(key);
+        result.push({
+            label: String(endpoint.label || `Address ${index + 1}`).trim() || `Address ${index + 1}`,
+            url,
+        });
+    });
+    return result;
+}
+
+export function parseEndpointDraft(value) {
+    return String(value || '')
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .map((line, index) => {
+            const separator = line.indexOf('|');
+            if (separator === -1)
+                return { label: `Address ${index + 1}`, url: line.trim() };
+            const label = line.slice(0, separator).trim() || `Address ${index + 1}`;
+            const url = line.slice(separator + 1).trim();
+            return { label, url };
+        });
+}
+
+export function formatEndpointDraft(value) {
+    return normalizeEndpoints(value)
+        .map(endpoint => `${endpoint.label} | ${endpoint.url}`)
+        .join('\n');
+}
+
+export function serviceEndpoints(service, hostname) {
+    const raw = [
+        { label: 'Primary', url: String(service?.url || '').trim() },
+        ...normalizeEndpoints(service?.endpoints),
+    ];
+    const seen = new Set();
+    return raw
+        .map((endpoint, index) => ({
+            label: endpoint.label || (index === 0 ? 'Primary' : `Address ${index}`),
+            url: expandUrl(endpoint.url, hostname),
+            primary: index === 0,
+        }))
+        .filter(endpoint => allowedUrl(endpoint.url))
+        .filter(endpoint => {
+            const key = endpoint.url.toLowerCase();
+            if (seen.has(key))
+                return false;
+            seen.add(key);
+            return true;
+        });
 }
 
 export function normalizeDisplayMode(value) {
@@ -157,11 +247,14 @@ export function editableBookmark(service = EMPTY_BOOKMARK) {
     return {
         name: String(service.name || ''),
         url: String(service.url || ''),
+        endpoints: formatEndpointDraft(service.endpoints),
         description: String(service.description || ''),
         group: String(service.group || ''),
         icon: String(service.icon || ''),
+        accent: normalizeAccent(service.accent),
         tags: tagsArray(service.tags).join(', '),
         openMode: normalizeOpenMode(service.openMode),
+        statusCheck: service.statusCheck !== false,
     };
 }
 
@@ -180,6 +273,23 @@ export function storedBookmark(draft, original = {}) {
         else
             delete bookmark[field];
     }
+
+    const endpoints = normalizeEndpoints(parseEndpointDraft(draft.endpoints));
+    if (endpoints.length)
+        bookmark.endpoints = endpoints;
+    else
+        delete bookmark.endpoints;
+
+    const accent = normalizeAccent(draft.accent);
+    if (accent !== 'none')
+        bookmark.accent = accent;
+    else
+        delete bookmark.accent;
+
+    if (draft.statusCheck === false)
+        bookmark.statusCheck = false;
+    else
+        delete bookmark.statusCheck;
 
     const tags = tagsArray(draft.tags);
     if (tags.length)
@@ -200,12 +310,15 @@ function comparableService(service) {
     return {
         name: String(service?.name || ''),
         url: String(service?.url || ''),
+        endpoints: normalizeEndpoints(service?.endpoints),
         description: String(service?.description || ''),
         group: String(service?.group || ''),
         icon: String(service?.icon || ''),
+        accent: normalizeAccent(service?.accent),
         tags: tagsArray(service?.tags).map(tag => tag.toLowerCase()).sort(),
         favorite: service?.favorite === true,
         openMode: normalizeOpenMode(service?.openMode),
+        statusCheck: service?.statusCheck !== false,
     };
 }
 
@@ -236,6 +349,11 @@ export function validateBookmark(draft, hostname) {
         errors.url = 'URL is required.';
     else if (!allowedUrl(expandUrl(url, hostname)))
         errors.url = 'Use a complete http:// or https:// URL. The {host} placeholder is supported.';
+
+    const endpoints = parseEndpointDraft(draft.endpoints);
+    const invalidEndpoint = endpoints.findIndex(endpoint => !endpoint.url || !allowedUrl(expandUrl(endpoint.url, hostname)));
+    if (invalidEndpoint !== -1)
+        errors.endpoints = `Alternate address ${invalidEndpoint + 1} must use a complete http:// or https:// URL.`;
 
     return errors;
 }

@@ -6,6 +6,14 @@ The project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Host-side TCP availability indicators for bookmarks, with bounded checks on page load and a manual refresh summary.
+- Multiple addresses per bookmark while keeping the existing URL as the primary/default address.
+- User card actions outside Edit mode: Open in new tab, Copy URL, and locally generated QR code.
+- Dashboard service summary showing online, offline, and unknown counts.
+- Expanded icon presets and optional theme-safe card accent presets.
+
 ### Packaging
 
 - Debian revision `0.5.0-2` installs AppStream metainfo under `/usr/share/metainfo/` so Cockpit's Applications page can recognize an installed Cockpit Bookmarks package.
