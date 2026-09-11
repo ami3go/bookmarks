@@ -5,6 +5,7 @@ import '@patternfly/patternfly/patternfly.css';
 import './cockpit-dark-theme.js';
 import './app.css';
 import './bookmark-sections.css';
+import './bookmark-hover.css';
 import './management-dialogs.css';
 import './page-visibility.css';
 import './native-controls.css';
