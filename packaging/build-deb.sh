@@ -2,8 +2,10 @@
 set -eu
 
 PACKAGE_NAME="cockpit-bookmarks"
-DEB_REVISION="${DEB_REVISION:-1}"
+DEB_REVISION="${DEB_REVISION:-2}"
 RELEASE_DIR="${RELEASE_DIR:-release}"
+METAINFO_SOURCE="packaging/debian/io.github.ami3go.cockpit_bookmarks.metainfo.xml"
+METAINFO_NAME="io.github.ami3go.cockpit_bookmarks.metainfo.xml"
 
 VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)"
 if [ -z "$VERSION" ]; then
@@ -23,7 +25,7 @@ command -v dpkg-deb >/dev/null 2>&1 || {
     exit 1
 }
 
-for required in dist/index.html dist/index.css dist/index.js dist/manifest.json examples/cockpit-bookmarks.json; do
+for required in dist/index.html dist/index.css dist/index.js dist/manifest.json examples/cockpit-bookmarks.json "$METAINFO_SOURCE"; do
     test -s "$required" || {
         echo "Missing prebuilt file: $required" >&2
         exit 1
@@ -37,13 +39,15 @@ trap 'rm -rf "$BUILD_ROOT"' EXIT HUP INT TERM
 
 PLUGIN_DIR="$BUILD_ROOT/usr/share/cockpit/$PACKAGE_NAME"
 DOC_DIR="$BUILD_ROOT/usr/share/doc/$PACKAGE_NAME"
+METAINFO_DIR="$BUILD_ROOT/usr/share/metainfo"
 CONTROL_DIR="$BUILD_ROOT/DEBIAN"
 
-install -d -m 0755 "$PLUGIN_DIR" "$DOC_DIR/examples" "$CONTROL_DIR"
+install -d -m 0755 "$PLUGIN_DIR" "$DOC_DIR/examples" "$METAINFO_DIR" "$CONTROL_DIR"
 cp -a dist/. "$PLUGIN_DIR/"
 find "$PLUGIN_DIR" -type d -exec chmod 0755 {} +
 find "$PLUGIN_DIR" -type f -exec chmod 0644 {} +
 
+install -m 0644 "$METAINFO_SOURCE" "$METAINFO_DIR/$METAINFO_NAME"
 install -m 0644 examples/cockpit-bookmarks.json "$DOC_DIR/examples/cockpit-bookmarks.json"
 install -m 0644 README.md "$DOC_DIR/README.md"
 install -m 0644 LICENSE "$DOC_DIR/copyright"
