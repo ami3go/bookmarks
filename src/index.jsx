@@ -11,9 +11,16 @@ import './native-controls.css';
 import './floating-action-menu.css';
 import './floating-action-menu.js';
 import './service-discovery.css';
+import './update-notification.css';
 import { Application } from './app.jsx';
+import { UpdateNotification } from './update-notification.jsx';
 
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('app');
-    createRoot(root).render(<Application />);
+    createRoot(root).render(
+        <>
+            <Application />
+            <UpdateNotification />
+        </>
+    );
 });
