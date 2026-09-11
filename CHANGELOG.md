@@ -4,6 +4,14 @@ All notable changes to Cockpit Bookmarks are documented here.
 
 The project follows semantic versioning where practical.
 
+## [Unreleased]
+
+### Packaging
+
+- Debian revision `0.5.0-2` installs AppStream metainfo under `/usr/share/metainfo/` so Cockpit's Applications page can recognize an installed Cockpit Bookmarks package.
+- The Debian package now declares that it enhances Cockpit and suggests `cockpit-packagekit` for Applications-page management.
+- Debian package tests verify the AppStream component ID, Cockpit extension relationship, `cockpit-manifest` launchable, package relationships, and Node-free rebuild path.
+
 ## [0.5.0] - 2026-08-23
 
 ### Added
