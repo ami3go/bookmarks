@@ -106,7 +106,7 @@ jobs:
           version=$(node -p "require('./package.json').version")
           root="cockpit-bookmarks-${version}"
           archive="release/${root}.tar.gz"
-          deb="release/cockpit-bookmarks_${version}-1_all.deb"
+          deb="release/cockpit-bookmarks_${version}-2_all.deb"
           test -s dist/index.html
           test -s dist/index.css
           test -s dist/index.js
@@ -120,7 +120,9 @@ jobs:
           tar -tzf "$archive" | grep -Fx "$root/package.json"
           tar -tzf "$archive" | grep -Fx "$root/LICENSE"
           tar -tzf "$archive" | grep -Fx "$root/packaging/build-deb.sh"
+          tar -tzf "$archive" | grep -Fx "$root/packaging/debian/io.github.ami3go.cockpit_bookmarks.metainfo.xml"
           dpkg-deb --contents "$deb" | grep -q 'usr/share/cockpit/cockpit-bookmarks/index.html$'
+          dpkg-deb --contents "$deb" | grep -q 'usr/share/metainfo/io.github.ami3go.cockpit_bookmarks.metainfo.xml$'
 
       - name: Test prebuilt install without Node.js
         run: |
