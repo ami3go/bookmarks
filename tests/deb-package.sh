@@ -2,10 +2,11 @@
 set -eu
 
 VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)"
-DEB_REVISION="${DEB_REVISION:-1}"
+DEB_REVISION="${DEB_REVISION:-2}"
 DEB_VERSION="${VERSION}-${DEB_REVISION}"
 DEB="release/cockpit-bookmarks_${DEB_VERSION}_all.deb"
 ARCHIVE="release/cockpit-bookmarks-${VERSION}.tar.gz"
+METAINFO_REL="usr/share/metainfo/io.github.ami3go.cockpit_bookmarks.metainfo.xml"
 
 fail() {
     echo "Debian package test failed: $*" >&2
@@ -20,9 +21,12 @@ test -s "$ARCHIVE" || fail "missing $ARCHIVE"
 [ "$(dpkg-deb -f "$DEB" Architecture)" = "all" ] || fail "unexpected architecture"
 [ "$(dpkg-deb -f "$DEB" Depends)" = "cockpit" ] || fail "unexpected Depends"
 [ "$(dpkg-deb -f "$DEB" Recommends)" = "iproute2" ] || fail "unexpected Recommends"
+[ "$(dpkg-deb -f "$DEB" Suggests)" = "cockpit-packagekit" ] || fail "unexpected Suggests"
+[ "$(dpkg-deb -f "$DEB" Enhances)" = "cockpit" ] || fail "unexpected Enhances"
 
 dpkg-deb --contents "$DEB" | grep -q 'usr/share/cockpit/cockpit-bookmarks/index.html$' || fail "missing Cockpit index.html"
 dpkg-deb --contents "$DEB" | grep -q 'usr/share/cockpit/cockpit-bookmarks/manifest.json$' || fail "missing Cockpit manifest"
+dpkg-deb --contents "$DEB" | grep -q 'usr/share/metainfo/io.github.ami3go.cockpit_bookmarks.metainfo.xml$' || fail "missing AppStream metadata"
 dpkg-deb --contents "$DEB" | grep -q 'usr/share/doc/cockpit-bookmarks/examples/cockpit-bookmarks.json$' || fail "missing default config example"
 
 ROOT="$(mktemp -d)"
@@ -31,6 +35,13 @@ PREBUILT_ROOT="$(mktemp -d)"
 trap 'rm -rf "$ROOT" "$MIGRATION_ROOT" "$PREBUILT_ROOT"' EXIT HUP INT TERM
 
 dpkg-deb -R "$DEB" "$ROOT"
+METAINFO="$ROOT/$METAINFO_REL"
+test -s "$METAINFO" || fail "AppStream metadata was not extracted"
+grep -Fq '<component type="addon">' "$METAINFO" || fail "AppStream component is not an addon"
+grep -Fq '<id>io.github.ami3go.cockpit_bookmarks</id>' "$METAINFO" || fail "unexpected AppStream component ID"
+grep -Fq '<extends>org.cockpit_project.cockpit</extends>' "$METAINFO" || fail "AppStream component does not extend Cockpit"
+grep -Fq '<launchable type="cockpit-manifest">cockpit-bookmarks</launchable>' "$METAINFO" || fail "AppStream launchable does not match Cockpit package"
+
 COCKPIT_BOOKMARKS_ROOT="$ROOT" sh "$ROOT/DEBIAN/postinst" configure
 CONFIG="$ROOT/etc/cockpit/cockpit-bookmarks.json"
 test -s "$CONFIG" || fail "postinst did not create config"
@@ -59,5 +70,6 @@ env PATH=/usr/bin:/bin make -C "$SOURCE_ROOT" RELEASE_DIR="$OUTPUT_DIR" DEB_REVI
 PREBUILT_DEB="$OUTPUT_DIR/cockpit-bookmarks_${DEB_VERSION}_all.deb"
 test -s "$PREBUILT_DEB" || fail "Node-free prebuilt Debian build failed"
 [ "$(dpkg-deb -f "$PREBUILT_DEB" Version)" = "$DEB_VERSION" ] || fail "prebuilt Debian package has wrong version"
+dpkg-deb --contents "$PREBUILT_DEB" | grep -q 'usr/share/metainfo/io.github.ami3go.cockpit_bookmarks.metainfo.xml$' || fail "prebuilt Debian package is missing AppStream metadata"
 
 echo "Debian package checks passed: $DEB"
