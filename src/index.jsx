@@ -20,8 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('app');
     createRoot(root).render(
         <>
-            <Application />
             <UpdateNotification />
+            <Application />
         </>
     );
 });
