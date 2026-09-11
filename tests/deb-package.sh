@@ -13,6 +13,8 @@ fail() {
     exit 1
 }
 
+sh -n packaging/local-apt-test.sh || fail "local APT test helper has invalid shell syntax"
+
 test -s "$DEB" || fail "missing $DEB"
 test -s "$ARCHIVE" || fail "missing $ARCHIVE"
 
