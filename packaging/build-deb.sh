@@ -2,7 +2,7 @@
 set -eu
 
 PACKAGE_NAME="cockpit-bookmarks"
-DEB_REVISION="${DEB_REVISION:-2}"
+DEB_REVISION="${DEB_REVISION:-3}"
 RELEASE_DIR="${RELEASE_DIR:-release}"
 METAINFO_SOURCE="packaging/debian/io.github.ami3go.cockpit_bookmarks.metainfo.xml"
 METAINFO_NAME="io.github.ami3go.cockpit_bookmarks.metainfo.xml"
