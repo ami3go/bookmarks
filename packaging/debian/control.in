@@ -6,6 +6,8 @@ Architecture: all
 Maintainer: Aleksandr Chasnyk <69671996+ami3go@users.noreply.github.com>
 Depends: cockpit
 Recommends: iproute2
+Suggests: cockpit-packagekit
+Enhances: cockpit
 Installed-Size: @INSTALLED_SIZE@
 Homepage: https://github.com/ami3go/bookmarks
 Description: lightweight Cockpit bookmarks page for local services
@@ -14,5 +16,6 @@ Description: lightweight Cockpit bookmarks page for local services
  favorites, edit-mode management, JSON configuration, history, and optional
  host-local service discovery.
  .
- The runtime package contains only prebuilt static assets. Node.js and npm are
- not required on the target machine.
+ AppStream metadata identifies this package as a Cockpit add-on so compatible
+ Cockpit Applications/PackageKit installations can discover and manage it.
+ Node.js and npm are not required on the target machine.
