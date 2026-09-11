@@ -1,6 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
-import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 
 import { checkForPackageUpdate } from './update-check.js';
 
@@ -26,21 +24,21 @@ export function UpdateNotification() {
     const openUpdates = () => window.cockpit.jump('/updates');
 
     return (
-        <div className="bookmarks-update-notification">
-            <Alert
-                isInline
-                variant="info"
-                title={`Cockpit Bookmarks ${availableUpdate.candidate} is available`}
+        <div
+            className="bookmarks-update-status"
+            role="status"
+            aria-live="polite"
+            title={`Installed ${availableUpdate.installed}; update candidate ${availableUpdate.candidate}`}
+        >
+            <span>Cockpit Bookmarks update available: <strong>{availableUpdate.candidate}</strong></span>
+            <span className="bookmarks-update-status-separator" aria-hidden="true">·</span>
+            <button
+                type="button"
+                className="bookmarks-update-status-link"
+                onClick={openUpdates}
             >
-                <div className="bookmarks-update-notification-body">
-                    <span>
-                        Installed {availableUpdate.installed}. The host package manager reports {availableUpdate.candidate} as the upgrade candidate.
-                    </span>
-                    <Button variant="link" isInline onClick={openUpdates}>
-                        Open Software Updates
-                    </Button>
-                </div>
-            </Alert>
+                Software Updates
+            </button>
         </div>
     );
 }
