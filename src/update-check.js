@@ -21,10 +21,15 @@ export async function checkForPackageUpdate(cockpit) {
     if (!cockpit?.spawn)
         return null;
 
+    const spawnOptions = {
+        err: 'ignore',
+        environ: ['LC_ALL=C'],
+    };
+
     try {
         const output = await cockpit.spawn(
             ['apt-cache', 'policy', PACKAGE_NAME],
-            { err: 'ignore' }
+            spawnOptions
         );
         const { installed, candidate } = parseAptPolicy(output);
 
@@ -34,7 +39,7 @@ export async function checkForPackageUpdate(cockpit) {
         try {
             await cockpit.spawn(
                 ['dpkg', '--compare-versions', candidate, 'gt', installed],
-                { err: 'ignore' }
+                spawnOptions
             );
         } catch (_) {
             return null;
