@@ -1,0 +1,21 @@
+.bookmarks-update-notification {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1000;
+    width: min(32rem, calc(100vw - 2rem));
+}
+
+.bookmarks-update-notification-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+@media (max-width: 36rem) {
+    .bookmarks-update-notification {
+        right: 0.75rem;
+        bottom: 0.75rem;
+        width: calc(100vw - 1.5rem);
+    }
+}
