@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>io.github.ami3go.cockpit_bookmarks</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Cockpit Bookmarks</name>
+  <summary>Organize and launch local web services from Cockpit</summary>
+  <description>
+    <p>
+      Cockpit Bookmarks is a lightweight Cockpit add-on for organizing and
+      launching web services hosted on a mini PC or server. It supports grouped
+      bookmarks, search, favorites, edit-mode management, JSON configuration,
+      history, and optional host-local service discovery.
+    </p>
+  </description>
+  <extends>org.cockpit_project.cockpit</extends>
+  <launchable type="cockpit-manifest">cockpit-bookmarks</launchable>
+  <url type="homepage">https://github.com/ami3go/bookmarks</url>
+  <url type="bugtracker">https://github.com/ami3go/bookmarks/issues</url>
+  <developer id="io.github.ami3go">
+    <name>ami3go</name>
+  </developer>
+</component>
