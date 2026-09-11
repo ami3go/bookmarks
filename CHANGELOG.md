@@ -11,6 +11,8 @@ The project follows semantic versioning where practical.
 - Debian revision `0.5.0-2` installs AppStream metainfo under `/usr/share/metainfo/` so Cockpit's Applications page can recognize an installed Cockpit Bookmarks package.
 - The Debian package now declares that it enhances Cockpit and suggests `cockpit-packagekit` for Applications-page management.
 - Debian package tests verify the AppStream component ID, Cockpit extension relationship, `cockpit-manifest` launchable, package relationships, and Node-free rebuild path.
+- Debian revision `0.5.0-3` is the current development package revision and can be exposed through the included local APT test helper to exercise update notifications against a real APT candidate.
+- The local APT test helper creates and removes a temporary trusted `file:` repository under `/var/local/cockpit-bookmarks-apt`; it is for local testing only, not production distribution.
 
 ## [0.5.0] - 2026-08-23
 
