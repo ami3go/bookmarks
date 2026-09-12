@@ -18,8 +18,11 @@ while IFS= read -r -d '' arg; do
             printf '%s\0' "$arg"
             skip_credential=1
             ;;
-        --credential=*|-c=*)
-            printf '%s\0' "${arg%%=*}=<redacted>"
+        --credential=*)
+            printf '%s\0' '--credential=<redacted>'
+            ;;
+        -c=*)
+            printf '%s\0' '-c=<redacted>'
             ;;
         *)
             printf '%s\0' "$arg"
