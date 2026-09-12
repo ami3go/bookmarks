@@ -157,13 +157,16 @@ export function GoTTYCardEditor() {
         setNotice('');
     };
 
-    const close = () => {
-        if (saving)
-            return;
+    const resetEditor = () => {
         setService(null);
         setDraft(null);
         setErrors({});
         setNotice('');
+    };
+
+    const close = () => {
+        if (!saving)
+            resetEditor();
     };
 
     const save = async event => {
@@ -196,7 +199,7 @@ export function GoTTYCardEditor() {
                 return;
             }
 
-            close();
+            resetEditor();
         } catch (error) {
             setNotice(`Could not save launcher: ${messageFor(error)}`);
         } finally {
