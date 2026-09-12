@@ -8,9 +8,9 @@ import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import {
     buildDiscoveryCandidates,
     existingLocalBookmarkPorts,
-    inspectGoTTYListeners,
     parseListeningSockets,
 } from './discovery.js';
+import { inspectGoTTYListenersSafely } from './gotty-inspect.js';
 
 function candidateStatus(candidate) {
     if (candidate.alreadyBookmarked)
@@ -68,7 +68,7 @@ export function ServiceDiscovery({ visible = true, onOpenChange }) {
                 }),
             ]);
             const listeners = parseListeningSockets(output);
-            const gottyInfo = await inspectGoTTYListeners(window.cockpit, listeners, output);
+            const gottyInfo = await inspectGoTTYListenersSafely(window.cockpit, listeners, output);
             setCandidates(buildDiscoveryCandidates(listeners, config.services, hostname, gottyInfo));
             if (listeners.length === 0)
                 setError('No listening TCP services were detected.');
