@@ -12,9 +12,14 @@ import './native-controls.css';
 import './floating-action-menu.css';
 import './floating-action-menu.js';
 import './service-discovery.css';
+import './gotty-launcher-manager.css';
 import './update-notification.css';
 import { Application } from './app.jsx';
+import { GoTTYLauncherManager } from './gotty-launcher-manager.jsx';
+import { installGoTTYLauncherOpenInterceptor } from './gotty-launcher.js';
 import { UpdateNotification } from './update-notification.jsx';
+
+installGoTTYLauncherOpenInterceptor();
 
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('app');
@@ -22,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <>
             <UpdateNotification />
             <Application />
+            <GoTTYLauncherManager />
         </>
     );
 });
