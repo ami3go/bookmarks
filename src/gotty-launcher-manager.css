@@ -1,0 +1,87 @@
+.gotty-launcher-manager-floating {
+    position: fixed;
+    left: 1.25rem;
+    bottom: 1.25rem;
+    z-index: 350;
+}
+
+.gotty-launcher-manager-floating > button {
+    box-shadow: var(--pf-t--global--box-shadow--md, 0 0.25rem 0.75rem rgba(0, 0, 0, 0.22));
+}
+
+.gotty-launcher-intro {
+    margin-top: 0;
+    line-height: 1.5;
+}
+
+.gotty-launcher-presets,
+.gotty-launcher-item-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.gotty-launcher-presets {
+    margin: 1rem 0;
+}
+
+.gotty-launcher-list {
+    display: grid;
+    gap: 0.6rem;
+    margin-top: 1rem;
+}
+
+.gotty-launcher-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.8rem;
+    border: 1px solid var(--pf-t--global--border--color--default, currentcolor);
+    border-radius: 4px;
+}
+
+.gotty-launcher-item > div:first-child {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.gotty-launcher-item code,
+.gotty-launcher-item span {
+    overflow-wrap: anywhere;
+}
+
+.gotty-launcher-item span {
+    font-size: 0.8rem;
+    opacity: 0.72;
+}
+
+.gotty-launcher-empty {
+    padding: 1.5rem 1rem;
+    text-align: center;
+    opacity: 0.72;
+}
+
+.gotty-launcher-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+@media (max-width: 720px) {
+    .gotty-launcher-manager-floating {
+        left: 1rem;
+        bottom: 1rem;
+    }
+
+    .gotty-launcher-item {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .gotty-launcher-grid {
+        grid-template-columns: 1fr;
+    }
+}
