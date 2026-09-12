@@ -73,6 +73,23 @@
     opacity: 0.72;
 }
 
+.bookmarks-discovery-integration {
+    width: fit-content;
+    padding: 0.1rem 0.4rem;
+    border: 1px solid currentcolor;
+    border-radius: 999px;
+    font-weight: 600;
+    opacity: 0.8 !important;
+}
+
+.bookmarks-discovery-security-note {
+    line-height: 1.35;
+}
+
+.bookmarks-discovery-security-note::before {
+    content: "⚠ ";
+}
+
 .bookmarks-discovery-status {
     white-space: nowrap;
     font-size: 0.75rem;
