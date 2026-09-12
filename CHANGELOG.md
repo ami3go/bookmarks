@@ -13,6 +13,7 @@ The project follows semantic versioning where practical.
 - User card actions outside Edit mode: Open in new tab, Copy URL, and locally generated QR code.
 - Dashboard service summary showing online, offline, and unknown counts.
 - Expanded icon presets and optional theme-safe card accent presets.
+- First-class GoTTY discovery: terminal-specific bookmark defaults, process-aware TLS/base-path inference, credential redaction, `--permit-write` warnings, and safe handling of random-URL mode.
 
 ### Packaging
 
