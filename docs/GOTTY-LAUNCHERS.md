@@ -25,6 +25,10 @@ Launcher parameters:
 - **GoTTY executable** — normally `gotty`, or an absolute path when required
 - **Group / icon / accent** — normal dashboard presentation
 
+For new launchers, Bookmarks automatically chooses the first unused port in **47200–47299**. It skips ports already assigned to another GoTTY launcher and ports that are currently listening on the host. This range is intentionally kept away from common development web ports such as 3000, 8000, 8080, and 9000. You can still enter a custom unprivileged port manually.
+
+If all ports in the automatic range are occupied, Bookmarks asks you to choose a custom port instead of automatically moving into another range.
+
 A launcher is stored as a regular bookmark with additional metadata similar to:
 
 ```json
@@ -33,12 +37,12 @@ A launcher is stored as a regular bookmark with additional metadata similar to:
   "type": "gotty-launcher",
   "integration": "gotty",
   "name": "MC",
-  "url": "http://{host}:8085/cb-gotty-example-id/",
+  "url": "http://{host}:47200/cb-gotty-example-id/",
   "gottyLauncher": {
     "binary": "gotty",
     "command": "mc",
     "args": [],
-    "port": 8085,
+    "port": 47200,
     "address": "127.0.0.1",
     "autoStopMinutes": 30
   }
