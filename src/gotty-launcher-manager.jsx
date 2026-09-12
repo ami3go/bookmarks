@@ -15,6 +15,11 @@ import {
     stopGoTTYLauncher,
     validateLauncherDraft,
 } from './gotty-launcher.js';
+import {
+    GOTTY_LAUNCHER_PORT_END,
+    GOTTY_LAUNCHER_PORT_START,
+    findAvailableGoTTYLauncherPort,
+} from './gotty-launcher-ports.js';
 
 const PRESETS = [
     { label: 'MC', name: 'MC', command: 'mc', icon: '📁' },
@@ -24,14 +29,6 @@ const PRESETS = [
 
 function launchersFrom(config) {
     return (config?.services || []).filter(service => service?.type === GOTTY_LAUNCHER_TYPE);
-}
-
-function nextPort(launchers) {
-    const used = new Set(launchers.map(service => Number(service?.gottyLauncher?.port)).filter(Number.isInteger));
-    let port = 8085;
-    while (used.has(port) && port < 65535)
-        port += 1;
-    return port;
 }
 
 function messageFor(error) {
@@ -51,6 +48,7 @@ export function GoTTYLauncherManager() {
     const [errors, setErrors] = useState({});
     const [notice, setNotice] = useState('');
     const [saving, setSaving] = useState(false);
+    const [allocatingPort, setAllocatingPort] = useState(false);
 
     useEffect(() => {
         const permission = window.cockpit.permission({ admin: true });
@@ -81,19 +79,32 @@ export function GoTTYLauncherManager() {
         }
     };
 
-    const beginNew = preset => {
-        const base = launcherDraft(null, nextPort(launchers));
-        setDraft({
-            ...base,
-            ...(preset ? {
-                name: preset.name,
-                command: preset.command,
-                icon: preset.icon,
-            } : {}),
-        });
-        setEditingId(null);
-        setErrors({});
+    const beginNew = async preset => {
+        setAllocatingPort(true);
         setNotice('');
+        try {
+            const port = await findAvailableGoTTYLauncherPort(window.cockpit, launchers);
+            if (!port) {
+                setNotice(`No free automatic GoTTY launcher port remains in ${GOTTY_LAUNCHER_PORT_START}-${GOTTY_LAUNCHER_PORT_END}. Edit an existing launcher or choose a custom port.`);
+                return;
+            }
+
+            const base = launcherDraft(null, port);
+            setDraft({
+                ...base,
+                ...(preset ? {
+                    name: preset.name,
+                    command: preset.command,
+                    icon: preset.icon,
+                } : {}),
+            });
+            setEditingId(null);
+            setErrors({});
+        } catch (error) {
+            setNotice(`Could not choose a launcher port: ${messageFor(error)}`);
+        } finally {
+            setAllocatingPort(false);
+        }
     };
 
     const beginEdit = service => {
@@ -178,10 +189,10 @@ export function GoTTYLauncherManager() {
         <div className="gotty-launcher-manager-floating">
             <Button variant="secondary" onClick={openManager}>GoTTY launchers</Button>
 
-            <Modal isOpen={open} onClose={() => !saving && setOpen(false)} variant="medium">
+            <Modal isOpen={open} onClose={() => !saving && !allocatingPort && setOpen(false)} variant="medium">
                 <ModalHeader title="On-demand GoTTY launchers" />
                 <ModalBody>
-                    {notice && <Alert isInline variant={notice.includes('Could not') ? 'danger' : 'info'} title={notice} />}
+                    {notice && <Alert isInline variant={notice.includes('Could not') || notice.includes('No free') ? 'danger' : 'info'} title={notice} />}
 
                     {!draft ? (
                         <>
@@ -189,10 +200,15 @@ export function GoTTYLauncherManager() {
                                 Launcher bookmarks start GoTTY only when clicked, run the selected terminal application as the logged-in Cockpit user,
                                 and stop automatically after the configured runtime.
                             </p>
+                            <div className="bookmark-field-help">
+                                New launchers automatically use the first free port in <code>{GOTTY_LAUNCHER_PORT_START}-{GOTTY_LAUNCHER_PORT_END}</code>, skipping both configured launchers and ports already listening on this host.
+                            </div>
                             <div className="gotty-launcher-presets">
-                                <Button variant="primary" onClick={() => beginNew(null)}>New launcher</Button>
+                                <Button variant="primary" onClick={() => beginNew(null)} isDisabled={saving || allocatingPort}>
+                                    {allocatingPort ? 'Finding port…' : 'New launcher'}
+                                </Button>
                                 {PRESETS.map(preset => (
-                                    <Button variant="secondary" onClick={() => beginNew(preset)} key={preset.label}>
+                                    <Button variant="secondary" onClick={() => beginNew(preset)} isDisabled={saving || allocatingPort} key={preset.label}>
                                         New {preset.label}
                                     </Button>
                                 ))}
@@ -212,9 +228,9 @@ export function GoTTYLauncherManager() {
                                                 </span>
                                             </div>
                                             <div className="gotty-launcher-item-actions">
-                                                <Button variant="link" onClick={() => beginEdit(service)} isDisabled={saving}>Edit</Button>
-                                                <Button variant="link" onClick={() => stop(service)} isDisabled={saving}>Stop</Button>
-                                                <Button variant="link" isDanger onClick={() => remove(service)} isDisabled={saving}>Delete</Button>
+                                                <Button variant="link" onClick={() => beginEdit(service)} isDisabled={saving || allocatingPort}>Edit</Button>
+                                                <Button variant="link" onClick={() => stop(service)} isDisabled={saving || allocatingPort}>Stop</Button>
+                                                <Button variant="link" isDanger onClick={() => remove(service)} isDisabled={saving || allocatingPort}>Delete</Button>
                                             </div>
                                         </div>
                                     ))}
@@ -243,6 +259,7 @@ export function GoTTYLauncherManager() {
                                 <FormGroup label="TCP port" isRequired fieldId="gotty-launcher-port">
                                     <TextInput id="gotty-launcher-port" type="number" value={draft.port} onChange={(_event, value) => update('port', value)} validated={errors.port ? 'error' : 'default'} />
                                     {errors.port && <div className="bookmark-field-error">{errors.port}</div>}
+                                    <div className="bookmark-field-help">Automatically selected from {GOTTY_LAUNCHER_PORT_START}-{GOTTY_LAUNCHER_PORT_END}. You may override it with another unprivileged port.</div>
                                 </FormGroup>
                                 <FormGroup label="Auto-stop minutes" isRequired fieldId="gotty-launcher-timeout">
                                     <TextInput id="gotty-launcher-timeout" type="number" value={draft.autoStopMinutes} onChange={(_event, value) => update('autoStopMinutes', value)} validated={errors.autoStopMinutes ? 'error' : 'default'} />
@@ -296,7 +313,7 @@ export function GoTTYLauncherManager() {
                             <Button variant="link" onClick={() => setDraft(null)} isDisabled={saving}>Back</Button>
                         </>
                     ) : (
-                        <Button variant="secondary" onClick={() => setOpen(false)} isDisabled={saving}>Close</Button>
+                        <Button variant="secondary" onClick={() => setOpen(false)} isDisabled={saving || allocatingPort}>Close</Button>
                     )}
                 </ModalFooter>
             </Modal>
