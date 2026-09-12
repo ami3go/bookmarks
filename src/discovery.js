@@ -13,13 +13,15 @@ const NON_WEB_PORTS = new Set([
     6379, 6443, 11211, 27017,
 ]);
 
-const WEB_PROCESS_HINT = /(apache|caddy|code-server|grafana|gunicorn|hass|home-assistant|httpd|jellyfin|kibana|minio|navidrome|nginx|node|php|plex|portainer|prometheus|python|qbittorrent|syncthing|tomcat|traefik|transmission|uvicorn|vaultwarden)/i;
+const WEB_PROCESS_HINT = /(apache|caddy|code-server|gotty|grafana|gunicorn|hass|home-assistant|httpd|jellyfin|kibana|minio|navidrome|nginx|node|php|plex|portainer|prometheus|python|qbittorrent|syncthing|tomcat|traefik|transmission|uvicorn|vaultwarden)/i;
 const NON_WEB_PROCESS_HINT = /(mariadbd|mongod|mysqld|postgres|redis-server|rpcbind|smbd|sshd)/i;
+const GOTTY_PROCESS_HINT = /(^|[^a-z0-9])gotty([^a-z0-9]|$)/i;
 
 const PROCESS_LABELS = new Map([
     ['apache2', 'Apache'],
     ['caddy', 'Caddy'],
     ['code-server', 'Code Server'],
+    ['gotty', 'GoTTY Terminal'],
     ['grafana', 'Grafana'],
     ['grafana-server', 'Grafana'],
     ['hass', 'Home Assistant'],
@@ -39,6 +41,13 @@ const PROCESS_LABELS = new Map([
     ['traefik', 'Traefik'],
     ['transmission-da', 'Transmission'],
     ['vaultwarden', 'Vaultwarden'],
+]);
+
+const GOTTY_VALUE_OPTIONS = new Set([
+    '--address', '-a', '--port', '-p', '--path', '-m', '--credential', '-c', '--random-url-length',
+    '--tls-crt', '--tls-key', '--tls-ca-crt', '--index', '--title-format', '--reconnect-time',
+    '--max-connection', '--timeout', '--width', '--height', '--ws-origin', '--ws-query-args',
+    '--close-signal', '--close-timeout', '--config',
 ]);
 
 function endpointParts(endpoint) {
@@ -77,6 +86,14 @@ function listenerProcessNames(listener) {
 function loopbackAddress(address) {
     const value = String(address || '').replace(/^\[|\]$/g, '').split('%')[0].toLowerCase();
     return value === '::1' || value === 'localhost' || value.startsWith('127.');
+}
+
+function isGoTTYProcess(value) {
+    return GOTTY_PROCESS_HINT.test(String(value || '').toLowerCase());
+}
+
+function listenerIsGoTTY(listener) {
+    return listenerProcessNames(listener).some(isGoTTYProcess);
 }
 
 export function parseListeningSockets(output) {
@@ -124,6 +141,140 @@ export function parseListeningSockets(output) {
         .sort((left, right) => left.port - right.port);
 }
 
+export function gottyListenerPids(output) {
+    const result = new Map();
+
+    for (const rawLine of String(output || '').split(/\r?\n/)) {
+        const line = rawLine.trim();
+        if (!line || !line.includes('pid='))
+            continue;
+
+        const columns = line.split(/\s+/);
+        if (columns.length < 4 || columns[0] !== 'LISTEN')
+            continue;
+        const endpoint = endpointParts(columns[3]);
+        if (!endpoint || !processNames(line).some(isGoTTYProcess))
+            continue;
+
+        const pids = result.get(endpoint.port) || new Set();
+        for (const match of line.matchAll(/"([^"]+)",pid=(\d+)/g)) {
+            if (isGoTTYProcess(match[1]))
+                pids.add(Number(match[2]));
+        }
+        if (pids.size)
+            result.set(endpoint.port, pids);
+    }
+
+    return Object.fromEntries([...result].map(([port, pids]) => [port, [...pids]]));
+}
+
+function commandLineArguments(commandLine) {
+    const value = String(commandLine || '');
+    if (!value)
+        return [];
+    if (value.includes('\0'))
+        return value.split('\0').map(argument => argument.trim()).filter(Boolean);
+
+    return (value.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [])
+        .map(argument => argument.replace(/^(?:"(.*)"|'(.*)')$/, (_match, doubleQuoted, singleQuoted) => doubleQuoted ?? singleQuoted ?? ''));
+}
+
+function normalizeGoTTYPath(value) {
+    const raw = String(value || '/').trim();
+    if (!raw || raw === '/')
+        return '/';
+    return `/${raw.replace(/^\/+|\/+$/g, '')}/`;
+}
+
+export function parseGoTTYCommandLine(commandLine) {
+    const args = commandLineArguments(commandLine);
+    const result = {
+        inspected: true,
+        tls: false,
+        permitWrite: false,
+        authentication: false,
+        randomUrl: false,
+        path: '/',
+    };
+
+    for (let index = 1; index < args.length; index += 1) {
+        const argument = args[index];
+        if (argument === '--')
+            break;
+        if (!argument.startsWith('-'))
+            break;
+
+        if (argument === '--tls' || argument === '-t') {
+            result.tls = true;
+            continue;
+        }
+        if (argument === '--permit-write' || argument === '-w') {
+            result.permitWrite = true;
+            continue;
+        }
+        if (argument === '--random-url' || argument === '-r') {
+            result.randomUrl = true;
+            continue;
+        }
+        if (argument.startsWith('--path=')) {
+            result.path = normalizeGoTTYPath(argument.slice('--path='.length));
+            continue;
+        }
+        if (argument.startsWith('--credential=')) {
+            result.authentication = true;
+            continue;
+        }
+        if (argument === '--path' || argument === '-m') {
+            result.path = normalizeGoTTYPath(args[index + 1]);
+            index += 1;
+            continue;
+        }
+        if (argument === '--credential' || argument === '-c') {
+            result.authentication = true;
+            index += 1;
+            continue;
+        }
+
+        const equals = argument.indexOf('=');
+        const optionName = equals === -1 ? argument : argument.slice(0, equals);
+        if (GOTTY_VALUE_OPTIONS.has(optionName) && equals === -1)
+            index += 1;
+    }
+
+    return result;
+}
+
+export async function inspectGoTTYListeners(cockpit, listeners, socketOutput) {
+    const pidsByPort = gottyListenerPids(socketOutput);
+    const result = {};
+
+    await Promise.all((listeners || []).filter(listenerIsGoTTY).map(async listener => {
+        const pid = pidsByPort[listener.port]?.[0];
+        if (!pid) {
+            result[listener.port] = {
+                inspected: false,
+                reason: 'GoTTY process arguments are not visible to this user.',
+            };
+            return;
+        }
+
+        try {
+            const commandLine = await cockpit.spawn(['cat', `/proc/${pid}/cmdline`], {
+                superuser: 'try',
+                err: 'message',
+            });
+            result[listener.port] = parseGoTTYCommandLine(commandLine);
+        } catch (_) {
+            result[listener.port] = {
+                inspected: false,
+                reason: 'GoTTY process arguments could not be inspected.',
+            };
+        }
+    }));
+
+    return result;
+}
+
 function normalizeHostname(value) {
     return String(value || '').trim().replace(/^\[|\]$/g, '').toLowerCase();
 }
@@ -158,6 +309,8 @@ function serviceLabel(process, port) {
     const normalized = String(process || '').trim().toLowerCase();
     if (PROCESS_LABELS.has(normalized))
         return PROCESS_LABELS.get(normalized);
+    if (isGoTTYProcess(normalized))
+        return 'GoTTY Terminal';
 
     if (normalized) {
         const words = normalized
@@ -181,16 +334,79 @@ function listenerSupport(listener) {
     return { supported: true, reason: '' };
 }
 
-export function buildDiscoveryCandidates(listeners, services, hostname) {
+function gottyCandidate(listener, info, alreadyBookmarked) {
+    const scheme = info?.tls ? 'https' : (TLS_PORTS.has(listener.port) ? 'https' : 'http');
+    const path = normalizeGoTTYPath(info?.path || '/');
+    const url = `${scheme}://{host}:${listener.port}${path}`;
+    const securityNotes = [];
+
+    if (info?.permitWrite)
+        securityNotes.push('Interactive input is enabled (--permit-write). Treat this terminal as privileged access.');
+    if (info?.authentication)
+        securityNotes.push('Basic authentication is enabled. Credentials are intentionally not read or stored.');
+    if (info?.tls)
+        securityNotes.push('TLS is enabled by the GoTTY command line.');
+    if (info?.randomUrl)
+        securityNotes.push('Random URL mode is enabled. Enter the generated final URL manually; Bookmarks will not reconstruct the secret path.');
+    if (!info?.inspected)
+        securityNotes.push(info?.reason || 'GoTTY command-line options could not be inspected; URL settings are approximate.');
+
+    const supported = !info?.randomUrl;
+    const reason = info?.randomUrl ? 'GoTTY random URL requires a manual bookmark' : '';
+    const selected = supported && !listener.localOnly && !alreadyBookmarked && listener.port !== 9090;
+
+    return {
+        scheme,
+        url,
+        name: 'GoTTY Terminal',
+        integration: 'gotty',
+        supported,
+        reason,
+        likelyWeb: true,
+        selected,
+        securityNotes,
+        gotty: {
+            inspected: info?.inspected === true,
+            tls: info?.tls === true,
+            permitWrite: info?.permitWrite === true,
+            authentication: info?.authentication === true,
+            randomUrl: info?.randomUrl === true,
+            path,
+        },
+        bookmark: {
+            name: 'GoTTY Terminal',
+            url,
+            description: `Detected GoTTY web terminal listening on TCP port ${listener.port}`,
+            group: 'Terminal',
+            icon: '⌨️',
+            accent: 'teal',
+            tags: ['GoTTY', 'terminal', 'web-terminal', 'discovered', `port-${listener.port}`],
+            statusCheck: true,
+            integration: 'gotty',
+        },
+    };
+}
+
+export function buildDiscoveryCandidates(listeners, services, hostname, gottyInfoByPort = {}) {
     const existingPorts = existingLocalBookmarkPorts(services, hostname);
 
     return (listeners || []).map(listener => {
         const processes = listenerProcessNames(listener);
         const representativeProcess = String(listener.process || processes[0] || '');
-        const scheme = TLS_PORTS.has(listener.port) ? 'https' : 'http';
         const support = listenerSupport(listener);
-        const likelyWeb = WEB_PORTS.has(listener.port) || processes.some(process => WEB_PROCESS_HINT.test(process));
         const alreadyBookmarked = existingPorts.has(listener.port);
+        const isGoTTY = listenerIsGoTTY(listener);
+
+        if (isGoTTY && support.supported) {
+            return {
+                ...listener,
+                alreadyBookmarked,
+                ...gottyCandidate(listener, gottyInfoByPort?.[listener.port], alreadyBookmarked),
+            };
+        }
+
+        const scheme = TLS_PORTS.has(listener.port) ? 'https' : 'http';
+        const likelyWeb = WEB_PORTS.has(listener.port) || processes.some(process => WEB_PROCESS_HINT.test(process));
         const portTag = `port-${listener.port}`;
         const processTag = representativeProcess
             .toLowerCase()
