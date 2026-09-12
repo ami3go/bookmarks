@@ -8,6 +8,7 @@ import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import {
     buildDiscoveryCandidates,
     existingLocalBookmarkPorts,
+    inspectGoTTYListeners,
     parseListeningSockets,
 } from './discovery.js';
 
@@ -21,6 +22,13 @@ function candidateStatus(candidate) {
     if (!candidate.likelyWeb)
         return 'Unknown protocol';
     return 'Recommended';
+}
+
+function storedDiscoveredBookmark(candidate) {
+    const bookmark = storedBookmark(candidate.bookmark);
+    if (candidate.bookmark?.integration)
+        bookmark.integration = candidate.bookmark.integration;
+    return bookmark;
 }
 
 export function ServiceDiscovery({ visible = true, onOpenChange }) {
@@ -60,7 +68,8 @@ export function ServiceDiscovery({ visible = true, onOpenChange }) {
                 }),
             ]);
             const listeners = parseListeningSockets(output);
-            setCandidates(buildDiscoveryCandidates(listeners, config.services, hostname));
+            const gottyInfo = await inspectGoTTYListeners(window.cockpit, listeners, output);
+            setCandidates(buildDiscoveryCandidates(listeners, config.services, hostname, gottyInfo));
             if (listeners.length === 0)
                 setError('No listening TCP services were detected.');
         } catch (discoveryError) {
@@ -105,7 +114,7 @@ export function ServiceDiscovery({ visible = true, onOpenChange }) {
                 const existingPorts = existingLocalBookmarkPorts(current.services, hostname);
                 const additions = selected
                     .filter(candidate => !existingPorts.has(candidate.port))
-                    .map(candidate => storedBookmark(candidate.bookmark));
+                    .map(storedDiscoveredBookmark);
                 addedCount = additions.length;
 
                 if (additions.length === 0)
@@ -150,7 +159,7 @@ export function ServiceDiscovery({ visible = true, onOpenChange }) {
                 <ModalBody>
                     <p className="bookmarks-discovery-intro">
                         This checks listening TCP sockets on the Cockpit host. It does not scan your LAN. HTTP/HTTPS is inferred,
-                        so review the generated URL before adding unfamiliar services.
+                        so review the generated URL before adding unfamiliar services. GoTTY terminals receive extra process-aware checks when their PID is visible.
                     </p>
 
                     {error && <Alert isInline variant="warning" title={error} />}
@@ -190,6 +199,17 @@ export function ServiceDiscovery({ visible = true, onOpenChange }) {
                                                     {candidate.process ? ` · ${candidate.process}` : ''}
                                                     {candidate.addresses.length ? ` · ${candidate.addresses.join(', ')}` : ''}
                                                 </span>
+                                                {candidate.integration === 'gotty' && (
+                                                    <span className="bookmarks-discovery-integration">
+                                                        GoTTY terminal
+                                                        {candidate.gotty?.inspected ? ' · command line inspected' : ' · URL inference approximate'}
+                                                    </span>
+                                                )}
+                                                {candidate.securityNotes?.map((note, index) => (
+                                                    <span className="bookmarks-discovery-security-note" key={`${candidate.port}-${index}`}>
+                                                        {note}
+                                                    </span>
+                                                ))}
                                             </div>
                                             <span className="bookmarks-discovery-status">{candidateStatus(candidate)}</span>
                                         </label>
@@ -198,7 +218,7 @@ export function ServiceDiscovery({ visible = true, onOpenChange }) {
                             </div>
                             <Alert isInline variant="info" title="Discovery limitations">
                                 Loopback-only listeners may not be reachable from a remote browser. Unknown protocols are not selected automatically,
-                                and UDP-only services are not detected.
+                                and UDP-only services are not detected. GoTTY random-URL mode is never auto-added because its generated secret path is not reconstructed.
                             </Alert>
                         </>
                     )}
