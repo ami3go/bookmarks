@@ -15,6 +15,7 @@ import './service-discovery.css';
 import './gotty-launcher-manager.css';
 import './update-notification.css';
 import { Application } from './app.jsx';
+import { GoTTYCardEditor } from './gotty-card-editor.jsx';
 import { GoTTYLauncherManager } from './gotty-launcher-manager.jsx';
 import { installGoTTYLauncherOpenInterceptor } from './gotty-launcher.js';
 import { UpdateNotification } from './update-notification.jsx';
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <>
             <UpdateNotification />
             <Application />
+            <GoTTYCardEditor />
             <GoTTYLauncherManager />
         </>
     );
