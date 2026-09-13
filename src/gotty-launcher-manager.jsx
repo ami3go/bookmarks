@@ -9,6 +9,7 @@ import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput/
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import {
     GOTTY_LAUNCHER_TYPE,
+    TERMINAL_LAUNCHER_EDIT_EVENT,
     buildLauncherService,
     isNetworkExposedAddress,
     launcherDraft,
@@ -37,28 +38,6 @@ function messageFor(error) {
     } catch (_) {
         return String(error?.message || error || 'Unknown error');
     }
-}
-
-function cardIdentity(card) {
-    const titleSpans = card?.querySelectorAll?.('.bookmark-title-main > span') || [];
-    return {
-        name: titleSpans[1]?.textContent?.trim() || '',
-        description: card?.querySelector?.('.bookmark-description')?.textContent?.trim() || '',
-        section: card?.closest?.('.bookmark-group-section')?.querySelector?.('.bookmark-group-heading h2')?.textContent?.trim() || '',
-    };
-}
-
-function matchingLauncher(launchers, identity) {
-    const candidates = launchers.filter(service => {
-        if ((service?.name || '') !== identity.name)
-            return false;
-        if ((service?.description || '') !== identity.description)
-            return false;
-        if (identity.section && identity.section !== 'Favorites' && (service?.group || 'Ungrouped') !== identity.section)
-            return false;
-        return true;
-    });
-    return candidates.length === 1 ? candidates[0] : null;
 }
 
 export function GoTTYLauncherManager() {
@@ -137,54 +116,33 @@ export function GoTTYLauncherManager() {
     };
 
     useEffect(() => {
-        if (!allowed)
-            return undefined;
-
-        const passThrough = button => {
-            button.dataset.gottyEditPassthrough = '1';
-            button.click();
-        };
-
-        const handleEditClick = event => {
-            const button = event.target?.closest?.('button.bookmark-action-menu-item');
-            if (!button || button.textContent?.trim() !== 'Edit')
+        const handleLauncherEdit = async event => {
+            const id = String(event.detail?.id || '').trim();
+            if (!id)
                 return;
 
-            if (button.dataset.gottyEditPassthrough === '1') {
-                delete button.dataset.gottyEditPassthrough;
-                return;
+            setNotice('');
+            setErrors({});
+            setDraft(null);
+            setEditingId(null);
+            try {
+                const config = await readConfiguration();
+                const currentLaunchers = launchersFrom(config);
+                setLaunchers(currentLaunchers);
+                const service = currentLaunchers.find(item => item?.id === id);
+                if (!service)
+                    throw new Error('The terminal launcher no longer exists. Reload the dashboard and try again.');
+                beginEdit(service);
+                setOpen(true);
+            } catch (error) {
+                setNotice(`Could not open terminal launcher editor: ${messageFor(error)}`);
+                setOpen(true);
             }
-
-            const card = button.closest('.bookmark-card');
-            if (!card)
-                return;
-
-            const identity = cardIdentity(card);
-            if (!identity.name || !identity.description)
-                return;
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            readConfiguration()
-                .then(config => {
-                    const currentLaunchers = launchersFrom(config);
-                    const service = matchingLauncher(currentLaunchers, identity);
-                    if (!service) {
-                        passThrough(button);
-                        return;
-                    }
-
-                    setLaunchers(currentLaunchers);
-                    beginEdit(service);
-                    setOpen(true);
-                })
-                .catch(() => passThrough(button));
         };
 
-        document.addEventListener('click', handleEditClick, true);
-        return () => document.removeEventListener('click', handleEditClick, true);
-    }, [allowed]);
+        window.addEventListener(TERMINAL_LAUNCHER_EDIT_EVENT, handleLauncherEdit);
+        return () => window.removeEventListener(TERMINAL_LAUNCHER_EDIT_EVENT, handleLauncherEdit);
+    }, []);
 
     const update = (field, value) => {
         setDraft(current => ({ ...current, [field]: value }));
