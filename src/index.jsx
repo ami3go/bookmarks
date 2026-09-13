@@ -17,6 +17,7 @@ import './update-notification.css';
 import { Application } from './app.jsx';
 import { TerminalCardEditor } from './terminal-card-editor.jsx';
 import { TerminalLauncherManager } from './terminal-launcher-manager.jsx';
+import { TerminalProviderCompatibilityNotifier } from './terminal-provider-compatibility-notifier.jsx';
 import { installTerminalLauncherOpenInterceptor } from './terminal-launcher.js';
 import { UpdateNotification } from './update-notification.jsx';
 
@@ -27,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
     createRoot(root).render(
         <>
             <UpdateNotification />
+            <TerminalProviderCompatibilityNotifier />
             <Application />
             <TerminalCardEditor />
             <TerminalLauncherManager />
