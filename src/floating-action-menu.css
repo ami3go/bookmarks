@@ -2,6 +2,18 @@
     display: none !important;
 }
 
+/*
+ * Terminal-launcher and discovery dialogs keep their React-owned source
+ * buttons mounted so their existing handlers/state remain intact. The visible
+ * controls are mirrored into the edit-mode management bar by
+ * floating-action-menu.js, so the original fixed-position launchers stay
+ * hidden and the page has one consistent management surface.
+ */
+.gotty-launcher-manager-floating > button,
+.bookmarks-discovery-floating > .bookmarks-discovery-launcher {
+    display: none !important;
+}
+
 .bookmark-floating-action-menu {
     position: fixed;
     z-index: 10000;
