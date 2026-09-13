@@ -1,0 +1,88 @@
+name: Temp fix GoTTY editor routing
+
+on:
+  push:
+    branches:
+      - feature-edit-gotty-card
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature-edit-gotty-card
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Patch editor routing
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected exactly one match, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              'src/gotty-launcher.js',
+              "export const GOTTY_LAUNCHER_TYPE = 'gotty-launcher';\nexport const GOTTY_LAUNCHER_PATH_PREFIX = '/cb-gotty-';",
+              "export const GOTTY_LAUNCHER_TYPE = 'gotty-launcher';\nexport const GOTTY_LAUNCHER_EDIT_EVENT = 'cockpit-bookmarks:edit-gotty-launcher';\nexport const GOTTY_LAUNCHER_PATH_PREFIX = '/cb-gotty-';"
+          )
+
+          replace_once(
+              'src/app.jsx',
+              "import { ServiceDiscovery } from './service-discovery.jsx';",
+              "import { ServiceDiscovery } from './service-discovery.jsx';\nimport { GOTTY_LAUNCHER_EDIT_EVENT, GOTTY_LAUNCHER_TYPE } from './gotty-launcher.js';"
+          )
+
+          replace_once(
+              'src/app.jsx',
+              "        clearWriteError('editor');\n        setSelectedBookmark(serviceSelectionKey(service));\n        const storedService = runtimeFreeService(service);\n        setDraft(editableBookmark(storedService));\n        setFormErrors({});\n        setEditor({\n            mode: 'edit',\n            target: { index: service.sourceIndex, service: storedService },\n        });",
+              "        clearWriteError('editor');\n        setSelectedBookmark(serviceSelectionKey(service));\n        const storedService = runtimeFreeService(service);\n\n        if (storedService.type === GOTTY_LAUNCHER_TYPE) {\n            if (!storedService.id) {\n                setNotice({ variant: 'danger', text: 'This GoTTY launcher has no stable ID and cannot be edited safely.' });\n                return;\n            }\n            setEditor(null);\n            setFormErrors({});\n            window.dispatchEvent(new CustomEvent(GOTTY_LAUNCHER_EDIT_EVENT, { detail: { id: storedService.id } }));\n            return;\n        }\n\n        setDraft(editableBookmark(storedService));\n        setFormErrors({});\n        setEditor({\n            mode: 'edit',\n            target: { index: service.sourceIndex, service: storedService },\n        });"
+          )
+
+          replace_once(
+              'src/gotty-launcher-manager.jsx',
+              "    GOTTY_LAUNCHER_TYPE,\n    buildLauncherService,",
+              "    GOTTY_LAUNCHER_EDIT_EVENT,\n    GOTTY_LAUNCHER_TYPE,\n    buildLauncherService,"
+          )
+
+          replace_once(
+              'src/gotty-launcher-manager.jsx',
+              "    const [saving, setSaving] = useState(false);\n    const [allocatingPort, setAllocatingPort] = useState(false);\n\n    useEffect(() => {",
+              "    const [saving, setSaving] = useState(false);\n    const [allocatingPort, setAllocatingPort] = useState(false);\n\n    useEffect(() => {\n        const handleLauncherEdit = async event => {\n            const id = String(event.detail?.id || '').trim();\n            if (!id)\n                return;\n\n            setNotice('');\n            setErrors({});\n            setDraft(null);\n            setEditingId(null);\n            try {\n                const config = await readConfiguration();\n                const currentLaunchers = launchersFrom(config);\n                setLaunchers(currentLaunchers);\n                const service = currentLaunchers.find(item => item?.id === id);\n                if (!service)\n                    throw new Error('The GoTTY launcher no longer exists. Reload the dashboard and try again.');\n                setDraft(launcherDraft(service));\n                setEditingId(service.id);\n                setOpen(true);\n            } catch (error) {\n                setNotice(`Could not open GoTTY launcher editor: ${messageFor(error)}`);\n                setOpen(true);\n            }\n        };\n\n        window.addEventListener(GOTTY_LAUNCHER_EDIT_EVENT, handleLauncherEdit);\n        return () => window.removeEventListener(GOTTY_LAUNCHER_EDIT_EVENT, handleLauncherEdit);\n    }, []);\n\n    useEffect(() => {"
+          )
+
+          replace_once(
+              'CHANGELOG.md',
+              "- First-class GoTTY discovery: terminal-specific bookmark defaults, process-aware TLS/base-path inference, credential redaction, `--permit-write` warnings, and safe handling of random-URL mode.\n",
+              "- First-class GoTTY discovery: terminal-specific bookmark defaults, process-aware TLS/base-path inference, credential redaction, `--permit-write` warnings, and safe handling of random-URL mode.\n- GoTTY launcher cards now route Edit directly to the launcher-specific editor, preventing generic-editor state conflicts while exposing executable, command, arguments, port, bind address, timeout, group, icon, and accent settings.\n"
+          )
+
+      - name: Run unit tests
+        run: npm ci && npm test
+
+      - name: Build production bundle
+        run: make clean && make
+
+      - name: Commit fix and remove temporary workflow
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/temp-fix-gotty-editor.yml
+          git add src/app.jsx src/gotty-launcher.js src/gotty-launcher-manager.jsx CHANGELOG.md
+          git commit -m "Fix GoTTY launcher card editing"
+          git push origin HEAD:feature-edit-gotty-card
