@@ -247,12 +247,12 @@ export function GoTTYLauncherManager() {
                             <FormGroup label="Application command" isRequired fieldId="gotty-launcher-command">
                                 <TextInput id="gotty-launcher-command" value={draft.command} onChange={(_event, value) => update('command', value)} placeholder="mc" validated={errors.command ? 'error' : 'default'} />
                                 {errors.command && <div className="bookmark-field-error">{errors.command}</div>}
-                                <div className="bookmark-field-help">Examples: <code>mc</code>, <code>btop</code>, <code>fish</code>, or an absolute executable path.</div>
+                                <div className="bookmark-field-help">Examples: <code>mc</code>, <code>btop</code>, <code>fish</code>, or an absolute executable path. Use <code>{'{host}'}</code> for the Cockpit host name or IP address.</div>
                             </FormGroup>
 
                             <FormGroup label="Arguments" fieldId="gotty-launcher-args">
                                 <TextArea id="gotty-launcher-args" value={draft.args} onChange={(_event, value) => update('args', value)} resizeOrientation="vertical" placeholder={'--some-option\n/path/with spaces'} />
-                                <div className="bookmark-field-help">Optional. One argument per line. Arguments are passed directly; they are not interpreted by a shell.</div>
+                                <div className="bookmark-field-help">Optional. One argument per line. Arguments are passed directly; they are not interpreted by a shell. Use <code>{'{host}'}</code> for the Cockpit host name or IP address.</div>
                             </FormGroup>
 
                             <div className="gotty-launcher-grid">
@@ -270,7 +270,7 @@ export function GoTTYLauncherManager() {
                             <FormGroup label="Listen address" isRequired fieldId="gotty-launcher-address">
                                 <TextInput id="gotty-launcher-address" value={draft.address} onChange={(_event, value) => update('address', value)} placeholder="127.0.0.1" validated={errors.address ? 'error' : 'default'} />
                                 {errors.address && <div className="bookmark-field-error">{errors.address}</div>}
-                                <div className="bookmark-field-help">Default <code>127.0.0.1</code> is safest. A remote browser normally needs a network-facing address such as <code>0.0.0.0</code> or an address reachable through a trusted VPN/firewall.</div>
+                                <div className="bookmark-field-help">Default <code>127.0.0.1</code> is safest. A remote browser normally needs a network-facing address such as <code>0.0.0.0</code> or an address reachable through a trusted VPN/firewall. Use <code>{'{host}'}</code> for the Cockpit host name or IP address.</div>
                             </FormGroup>
                             {exposed && (
                                 <Alert isInline variant="warning" title="Writable terminal will be network-facing">

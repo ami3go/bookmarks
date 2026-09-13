@@ -22,6 +22,8 @@ Launcher parameters:
 - **TCP port** — unprivileged port used by this launcher
 - **Auto-stop minutes** — maximum lifetime of the transient GoTTY systemd service
 - **Listen address** — where GoTTY binds
+
+**Application command**, **Arguments**, and **Listen address** accept the `{host}` placeholder, resolved to the Cockpit host name or IP address the browser is currently using — the same substitution used in regular bookmark URLs. It is expanded just before the launcher starts, so the stored configuration keeps the placeholder rather than a fixed address.
 - **GoTTY executable** — normally `gotty`, or an absolute path when required
 - **Group / icon / accent** — normal dashboard presentation
 

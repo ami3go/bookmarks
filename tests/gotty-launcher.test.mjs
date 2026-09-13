@@ -5,6 +5,7 @@ import {
     GOTTY_LAUNCHER_TYPE,
     buildLauncherService,
     buildSystemdRunArguments,
+    expandLauncherHost,
     formatLauncherArguments,
     isNetworkExposedAddress,
     launcherIdFromUrl,
@@ -108,6 +109,35 @@ test('argument editor uses one argv item per line', () => {
     const parsed = parseLauncherArguments('--foo\nvalue with spaces\n\n--bar');
     assert.deepEqual(parsed, ['--foo', 'value with spaces', '--bar']);
     assert.equal(formatLauncherArguments(parsed), '--foo\nvalue with spaces\n--bar');
+});
+
+test('expands the {host} placeholder in command, arguments, and listen address at start time', () => {
+    const service = buildLauncherService({
+        ...BASE_DRAFT,
+        id: 'host-placeholder',
+        command: '/usr/bin/ssh',
+        args: '{host}\n--flag',
+        address: '{host}',
+    });
+
+    assert.equal(service.gottyLauncher.address, '{host}');
+    assert.deepEqual(service.gottyLauncher.args, ['{host}', '--flag']);
+
+    const argv = buildSystemdRunArguments(service, '192.168.1.50');
+    assert.equal(argv.includes('{host}'), false);
+
+    const addressIndex = argv.indexOf('--address') + 1;
+    assert.equal(argv[addressIndex], '192.168.1.50');
+
+    const commandIndex = argv.indexOf('/usr/bin/ssh');
+    assert.deepEqual(argv.slice(commandIndex), ['/usr/bin/ssh', '192.168.1.50', '--flag']);
+});
+
+test('expandLauncherHost substitutes {host} without URL-style IPv6 bracketing', () => {
+    assert.equal(expandLauncherHost('{host}', '203.0.113.5'), '203.0.113.5');
+    assert.equal(expandLauncherHost('prefix-{host}-suffix', 'example.local'), 'prefix-example.local-suffix');
+    assert.equal(expandLauncherHost('{host}', '::1'), '::1');
+    assert.equal(expandLauncherHost('no-placeholder', 'example.local'), 'no-placeholder');
 });
 
 test('distinguishes loopback-safe and network-facing listen addresses', () => {

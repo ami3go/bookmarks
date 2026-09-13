@@ -150,6 +150,10 @@ export function buildLauncherService(draft, original = null) {
     return service;
 }
 
+export function expandLauncherHost(value, hostname) {
+    return String(value || '').replaceAll('{host}', String(hostname || ''));
+}
+
 export function isNetworkExposedAddress(value) {
     const address = cleanText(value).toLowerCase();
     return !(address === '127.0.0.1' || address === 'localhost' || address === '::1' || address.startsWith('127.'));
@@ -162,8 +166,11 @@ export function probeAddress(value) {
     return address;
 }
 
-export function buildSystemdRunArguments(service) {
+export function buildSystemdRunArguments(service, hostname = '') {
     const launcher = normalizeGottyLauncher(service?.gottyLauncher);
+    const address = expandLauncherHost(launcher.address, hostname);
+    const command = expandLauncherHost(launcher.command, hostname);
+    const args = launcher.args.map(arg => expandLauncherHost(arg, hostname));
     const runtimeSeconds = Math.round(launcher.autoStopMinutes * 60);
     const unit = launcherUnitName(service?.id);
     return [
@@ -175,15 +182,15 @@ export function buildSystemdRunArguments(service) {
         '--service-type=exec',
         `--property=RuntimeMaxSec=${runtimeSeconds}`,
         '--property=KillMode=control-group',
-        `--description=Cockpit Bookmarks GoTTY: ${cleanText(service?.name) || launcher.command}`,
+        `--description=Cockpit Bookmarks GoTTY: ${cleanText(service?.name) || command}`,
         '--',
         launcher.binary,
-        '--address', launcher.address,
+        '--address', address,
         '--port', String(launcher.port),
         '--permit-write',
         '--path', launcherPath(service?.id).replace(/\/$/, ''),
-        launcher.command,
-        ...launcher.args,
+        command,
+        ...args,
     ];
 }
 
@@ -221,10 +228,11 @@ async function portAlreadyListening(cockpit, port) {
     }
 }
 
-export async function waitForLauncher(cockpit, service, attempts = 28, intervalMs = 250) {
+export async function waitForLauncher(cockpit, service, attempts = 28, intervalMs = 250, hostname = '') {
     const launcher = normalizeGottyLauncher(service?.gottyLauncher);
+    const address = expandLauncherHost(launcher.address, hostname);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
-        if (await tcpReady(cockpit, launcher))
+        if (await tcpReady(cockpit, { ...launcher, address }))
             return true;
         if (attempt + 1 < attempts)
             await sleep(intervalMs);
@@ -242,7 +250,7 @@ export async function stopGoTTYLauncher(cockpit, service) {
     }
 }
 
-export async function startGoTTYLauncher(cockpit, service) {
+export async function startGoTTYLauncher(cockpit, service, hostname = '') {
     if (!cockpit?.spawn)
         throw new Error('Cockpit command execution is unavailable.');
     if (service?.type !== GOTTY_LAUNCHER_TYPE)
@@ -252,16 +260,16 @@ export async function startGoTTYLauncher(cockpit, service) {
     const errors = validateLauncherDraft({
         name: service.name,
         binary: launcher.binary,
-        command: launcher.command,
+        command: expandLauncherHost(launcher.command, hostname),
         port: launcher.port,
-        address: launcher.address,
+        address: expandLauncherHost(launcher.address, hostname),
         autoStopMinutes: launcher.autoStopMinutes,
     });
     if (Object.keys(errors).length)
         throw new Error(Object.values(errors)[0]);
 
     if (await unitActive(cockpit, service)) {
-        if (await waitForLauncher(cockpit, service, 8, 250))
+        if (await waitForLauncher(cockpit, service, 8, 250, hostname))
             return { reused: true };
         await stopGoTTYLauncher(cockpit, service);
     }
@@ -269,8 +277,8 @@ export async function startGoTTYLauncher(cockpit, service) {
     if (await portAlreadyListening(cockpit, launcher.port))
         throw new Error(`TCP port ${launcher.port} is already in use by another service.`);
 
-    await cockpit.spawn(buildSystemdRunArguments(service), { err: 'message' });
-    if (!await waitForLauncher(cockpit, service)) {
+    await cockpit.spawn(buildSystemdRunArguments(service, hostname), { err: 'message' });
+    if (!await waitForLauncher(cockpit, service, undefined, undefined, hostname)) {
         await stopGoTTYLauncher(cockpit, service).catch(() => {});
         throw new Error(`GoTTY did not start listening on TCP port ${launcher.port}. Check that systemd user services, ${launcher.binary}, and ${launcher.command} are available.`);
     }
@@ -322,7 +330,7 @@ export function installGoTTYLauncherOpenInterceptor(cockpit = window.cockpit) {
                 const service = config.services.find(item => item?.id === launcherId && item?.type === GOTTY_LAUNCHER_TYPE);
                 if (!service)
                     throw new Error('The GoTTY launcher bookmark no longer exists.');
-                return startGoTTYLauncher(cockpit, service).then(() => service);
+                return startGoTTYLauncher(cockpit, service, window.location.hostname).then(() => service);
             })
             .then(service => {
                 if (!tab.closed)

@@ -228,12 +228,12 @@ export function GoTTYCardEditor() {
                         <FormGroup label="Application command" isRequired fieldId="gotty-card-command">
                             <TextInput id="gotty-card-command" value={draft.command} onChange={(_event, value) => update('command', value)} placeholder="/usr/bin/fish" validated={errors.command ? 'error' : 'default'} />
                             {errors.command && <div className="bookmark-field-error">{errors.command}</div>}
-                            <div className="bookmark-field-help">Examples: <code>/usr/bin/fish</code>, <code>/usr/bin/mc</code>, <code>/usr/bin/btop</code>, or another executable.</div>
+                            <div className="bookmark-field-help">Examples: <code>/usr/bin/fish</code>, <code>/usr/bin/mc</code>, <code>/usr/bin/btop</code>, or another executable. Use <code>{'{host}'}</code> for the Cockpit host name or IP address.</div>
                         </FormGroup>
 
                         <FormGroup label="Application arguments" fieldId="gotty-card-args">
                             <TextArea id="gotty-card-args" value={draft.args} onChange={(_event, value) => update('args', value)} resizeOrientation="vertical" placeholder={'--option\n/path/with spaces'} />
-                            <div className="bookmark-field-help">Optional. One argv entry per line. No shell expansion or <code>sh -c</code> is used.</div>
+                            <div className="bookmark-field-help">Optional. One argv entry per line. No shell expansion or <code>sh -c</code> is used. Use <code>{'{host}'}</code> for the Cockpit host name or IP address.</div>
                         </FormGroup>
 
                         <div className="gotty-launcher-grid">
@@ -251,7 +251,7 @@ export function GoTTYCardEditor() {
                         <FormGroup label="Listen address" isRequired fieldId="gotty-card-address">
                             <TextInput id="gotty-card-address" value={draft.address} onChange={(_event, value) => update('address', value)} placeholder="127.0.0.1" validated={errors.address ? 'error' : 'default'} />
                             {errors.address && <div className="bookmark-field-error">{errors.address}</div>}
-                            <div className="bookmark-field-help">Use <code>127.0.0.1</code> for host-only access or a reachable LAN/VPN address when the browser is on another machine.</div>
+                            <div className="bookmark-field-help">Use <code>127.0.0.1</code> for host-only access or a reachable LAN/VPN address when the browser is on another machine. Use <code>{'{host}'}</code> for the Cockpit host name or IP address.</div>
                         </FormGroup>
                         {exposed && (
                             <Alert isInline variant="warning" title="Writable terminal will be network-facing">
