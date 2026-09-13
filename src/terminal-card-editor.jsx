@@ -66,8 +66,10 @@ function decorateLauncherCards(config) {
             .find(button => ['Edit', 'Edit GoTTY launcher…', EDIT_LABEL].includes(button.textContent.trim()));
         if (!editButton)
             return;
-        editButton.dataset.terminalLauncherEdit = service.id;
-        editButton.textContent = EDIT_LABEL;
+        if (editButton.dataset.terminalLauncherEdit !== service.id)
+            editButton.dataset.terminalLauncherEdit = service.id;
+        if (editButton.textContent.trim() !== EDIT_LABEL)
+            editButton.textContent = EDIT_LABEL;
     });
 }
 
