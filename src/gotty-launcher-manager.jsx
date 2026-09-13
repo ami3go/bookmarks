@@ -39,6 +39,28 @@ function messageFor(error) {
     }
 }
 
+function cardIdentity(card) {
+    const titleSpans = card?.querySelectorAll?.('.bookmark-title-main > span') || [];
+    return {
+        name: titleSpans[1]?.textContent?.trim() || '',
+        description: card?.querySelector?.('.bookmark-description')?.textContent?.trim() || '',
+        section: card?.closest?.('.bookmark-group-section')?.querySelector?.('.bookmark-group-heading h2')?.textContent?.trim() || '',
+    };
+}
+
+function matchingLauncher(launchers, identity) {
+    const candidates = launchers.filter(service => {
+        if ((service?.name || '') !== identity.name)
+            return false;
+        if ((service?.description || '') !== identity.description)
+            return false;
+        if (identity.section && identity.section !== 'Favorites' && (service?.group || 'Ungrouped') !== identity.section)
+            return false;
+        return true;
+    });
+    return candidates.length === 1 ? candidates[0] : null;
+}
+
 export function GoTTYLauncherManager() {
     const [allowed, setAllowed] = useState(false);
     const [open, setOpen] = useState(false);
@@ -113,6 +135,56 @@ export function GoTTYLauncherManager() {
         setErrors({});
         setNotice('');
     };
+
+    useEffect(() => {
+        if (!allowed)
+            return undefined;
+
+        const passThrough = button => {
+            button.dataset.gottyEditPassthrough = '1';
+            button.click();
+        };
+
+        const handleEditClick = event => {
+            const button = event.target?.closest?.('button.bookmark-action-menu-item');
+            if (!button || button.textContent?.trim() !== 'Edit')
+                return;
+
+            if (button.dataset.gottyEditPassthrough === '1') {
+                delete button.dataset.gottyEditPassthrough;
+                return;
+            }
+
+            const card = button.closest('.bookmark-card');
+            if (!card)
+                return;
+
+            const identity = cardIdentity(card);
+            if (!identity.name || !identity.description)
+                return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            readConfiguration()
+                .then(config => {
+                    const currentLaunchers = launchersFrom(config);
+                    const service = matchingLauncher(currentLaunchers, identity);
+                    if (!service) {
+                        passThrough(button);
+                        return;
+                    }
+
+                    setLaunchers(currentLaunchers);
+                    beginEdit(service);
+                    setOpen(true);
+                })
+                .catch(() => passThrough(button));
+        };
+
+        document.addEventListener('click', handleEditClick, true);
+        return () => document.removeEventListener('click', handleEditClick, true);
+    }, [allowed]);
 
     const update = (field, value) => {
         setDraft(current => ({ ...current, [field]: value }));
@@ -245,9 +317,9 @@ export function GoTTYLauncherManager() {
                             </FormGroup>
 
                             <FormGroup label="Application command" isRequired fieldId="gotty-launcher-command">
-                                <TextInput id="gotty-launcher-command" value={draft.command} onChange={(_event, value) => update('command', value)} placeholder="mc" validated={errors.command ? 'error' : 'default'} />
+                                <TextInput id="gotty-launcher-command" value={draft.command} onChange={(_event, value) => update('command', value)} placeholder="/usr/bin/fish" validated={errors.command ? 'error' : 'default'} />
                                 {errors.command && <div className="bookmark-field-error">{errors.command}</div>}
-                                <div className="bookmark-field-help">Examples: <code>mc</code>, <code>btop</code>, <code>fish</code>, or an absolute executable path.</div>
+                                <div className="bookmark-field-help">Examples: <code>/usr/bin/mc</code>, <code>/usr/bin/btop</code>, <code>/usr/bin/fish</code>, or another executable path. Absolute paths are recommended for launcher reliability.</div>
                             </FormGroup>
 
                             <FormGroup label="Arguments" fieldId="gotty-launcher-args">
@@ -279,8 +351,9 @@ export function GoTTYLauncherManager() {
                             )}
 
                             <FormGroup label="GoTTY executable" isRequired fieldId="gotty-launcher-binary">
-                                <TextInput id="gotty-launcher-binary" value={draft.binary} onChange={(_event, value) => update('binary', value)} placeholder="gotty" validated={errors.binary ? 'error' : 'default'} />
+                                <TextInput id="gotty-launcher-binary" value={draft.binary} onChange={(_event, value) => update('binary', value)} placeholder="/usr/local/bin/gotty" validated={errors.binary ? 'error' : 'default'} />
                                 {errors.binary && <div className="bookmark-field-error">{errors.binary}</div>}
+                                <div className="bookmark-field-help">For manual GoTTY installs on Ubuntu this is commonly <code>/usr/local/bin/gotty</code>. An absolute path avoids systemd user-service PATH differences.</div>
                             </FormGroup>
 
                             <div className="gotty-launcher-grid">
