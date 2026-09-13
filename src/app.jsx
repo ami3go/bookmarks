@@ -40,6 +40,7 @@ import {
 import { modifyConfiguration, watchConfiguration } from './cockpit-config.js';
 import { ManagementDialogs } from './management-dialogs.jsx';
 import { ServiceDiscovery } from './service-discovery.jsx';
+import { GOTTY_LAUNCHER_EDIT_EVENT, GOTTY_LAUNCHER_TYPE } from './gotty-launcher.js';
 
 function PencilIcon() {
     return (
@@ -350,6 +351,18 @@ export const Application = () => {
         clearWriteError('editor');
         setSelectedBookmark(serviceSelectionKey(service));
         const storedService = runtimeFreeService(service);
+
+        if (storedService.type === GOTTY_LAUNCHER_TYPE) {
+            if (!storedService.id) {
+                setNotice({ variant: 'danger', text: 'This GoTTY launcher has no stable ID and cannot be edited safely.' });
+                return;
+            }
+            setEditor(null);
+            setFormErrors({});
+            window.dispatchEvent(new CustomEvent(GOTTY_LAUNCHER_EDIT_EVENT, { detail: { id: storedService.id } }));
+            return;
+        }
+
         setDraft(editableBookmark(storedService));
         setFormErrors({});
         setEditor({

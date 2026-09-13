@@ -8,6 +8,7 @@ import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput/
 
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import {
+    GOTTY_LAUNCHER_EDIT_EVENT,
     GOTTY_LAUNCHER_TYPE,
     buildLauncherService,
     isNetworkExposedAddress,
@@ -71,6 +72,36 @@ export function GoTTYLauncherManager() {
     const [notice, setNotice] = useState('');
     const [saving, setSaving] = useState(false);
     const [allocatingPort, setAllocatingPort] = useState(false);
+
+    useEffect(() => {
+        const handleLauncherEdit = async event => {
+            const id = String(event.detail?.id || '').trim();
+            if (!id)
+                return;
+
+            setNotice('');
+            setErrors({});
+            setDraft(null);
+            setEditingId(null);
+            try {
+                const config = await readConfiguration();
+                const currentLaunchers = launchersFrom(config);
+                setLaunchers(currentLaunchers);
+                const service = currentLaunchers.find(item => item?.id === id);
+                if (!service)
+                    throw new Error('The GoTTY launcher no longer exists. Reload the dashboard and try again.');
+                setDraft(launcherDraft(service));
+                setEditingId(service.id);
+                setOpen(true);
+            } catch (error) {
+                setNotice(`Could not open GoTTY launcher editor: ${messageFor(error)}`);
+                setOpen(true);
+            }
+        };
+
+        window.addEventListener(GOTTY_LAUNCHER_EDIT_EVENT, handleLauncherEdit);
+        return () => window.removeEventListener(GOTTY_LAUNCHER_EDIT_EVENT, handleLauncherEdit);
+    }, []);
 
     useEffect(() => {
         const permission = window.cockpit.permission({ admin: true });

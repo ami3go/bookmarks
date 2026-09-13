@@ -1,6 +1,7 @@
 import { expandUrl, newBookmarkId } from './bookmarks.js';
 
 export const GOTTY_LAUNCHER_TYPE = 'gotty-launcher';
+export const GOTTY_LAUNCHER_EDIT_EVENT = 'cockpit-bookmarks:edit-gotty-launcher';
 export const GOTTY_LAUNCHER_PATH_PREFIX = '/cb-gotty-';
 export const DEFAULT_GOTTY_LAUNCHER = {
     binary: 'gotty',

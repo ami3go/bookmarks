@@ -14,6 +14,7 @@ The project follows semantic versioning where practical.
 - Dashboard service summary showing online, offline, and unknown counts.
 - Expanded icon presets and optional theme-safe card accent presets.
 - First-class GoTTY discovery: terminal-specific bookmark defaults, process-aware TLS/base-path inference, credential redaction, `--permit-write` warnings, and safe handling of random-URL mode.
+- GoTTY launcher cards now route Edit directly to the launcher-specific editor, preventing generic-editor state conflicts while exposing executable, command, arguments, port, bind address, timeout, group, icon, and accent settings.
 
 ### Packaging
 
