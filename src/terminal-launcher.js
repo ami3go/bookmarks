@@ -103,6 +103,7 @@ export function launcherDraft(service = null, suggestedPort = DEFAULT_TERMINAL_L
     const launcher = normalizeTerminalLauncher(service?.gottyLauncher || {
         ...DEFAULT_TERMINAL_LAUNCHER,
         port: suggestedPort,
+        address: '{host}',
     });
     return {
         id: service?.id || '',
@@ -136,7 +137,7 @@ export function validateLauncherDraft(draft) {
     if (!Number.isInteger(port) || port < 1024 || port > 65535)
         errors.port = 'Use an unprivileged TCP port from 1024 to 65535.';
     if (!address || /[\s/]/.test(address))
-        errors.address = 'Use a listen address such as 127.0.0.1, 0.0.0.0, ::1, or ::.';
+        errors.address = 'Use a listen address such as {host}, 127.0.0.1, 0.0.0.0, ::1, or ::.';
     if (!Number.isInteger(autoStopMinutes) || autoStopMinutes < 1 || autoStopMinutes > 720)
         errors.autoStopMinutes = 'Auto-stop must be between 1 and 720 minutes.';
 
