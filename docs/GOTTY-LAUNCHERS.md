@@ -1,47 +1,30 @@
-# On-demand GoTTY launchers
+# On-demand terminal launchers: GoTTY and ttyd
 
-Cockpit Bookmarks can define launcher bookmarks that start a terminal application only when the bookmark is clicked.
+Cockpit Bookmarks can define launcher bookmarks that start a terminal application only when the bookmark is clicked. Each launcher can use either **GoTTY** or **ttyd** as its web-terminal server.
 
-Examples:
+Examples include MC (`mc`), btop (`btop`), Fish (`fish`), or another executable. The launcher opens a new browser tab immediately, starts a transient user service through `systemd-run --user`, waits for the configured TCP port, and then redirects the tab to the terminal.
 
-- **MC** → `mc`
-- **btop** → `btop`
-- **Fish** → `fish`
+## Choosing a terminal server
 
-The launcher opens a new browser tab immediately, starts a transient GoTTY service through the logged-in user's systemd user manager, waits for the configured TCP port to become ready, and then redirects the tab to GoTTY.
+The launcher editor has a **Terminal server** field:
 
-## Creating a launcher
+- **GoTTY** — preserves the existing launcher behavior and command line.
+- **ttyd** — uses ttyd's `--interface`, `--port`, `--writable`, and `--base-path` options.
 
-Open **GoTTY launchers** and choose **New launcher**, **New MC**, **New btop**, or **New Fish**.
+Existing saved launchers do not require migration. The historical bookmark type remains `gotty-launcher`, the URL path remains `/cb-gotty-<id>/`, and a launcher without a `provider` field is interpreted as GoTTY. This keeps old bookmarks, copied URLs, and systemd unit identities stable.
 
-Launcher parameters:
-
-- **Bookmark name** — card label, for example `MC`
-- **Application command** — executable to run inside GoTTY, for example `mc`, `btop`, or `fish`
-- **Arguments** — optional, one argv entry per line; no shell interpolation is performed
-- **TCP port** — unprivileged port used by this launcher
-- **Auto-stop minutes** — maximum lifetime of the transient GoTTY systemd service
-- **Listen address** — where GoTTY binds
-
-**Application command**, **Arguments**, and **Listen address** accept the `{host}` placeholder, resolved to the Cockpit host name or IP address the browser is currently using — the same substitution used in regular bookmark URLs. It is expanded just before the launcher starts, so the stored configuration keeps the placeholder rather than a fixed address.
-- **GoTTY executable** — normally `gotty`, or an absolute path when required
-- **Group / icon / accent** — normal dashboard presentation
-
-For new launchers, Bookmarks automatically chooses the first unused port in **47200–47299**. It skips ports already assigned to another GoTTY launcher and ports that are currently listening on the host. This range is intentionally kept away from common development web ports such as 3000, 8000, 8080, and 9000. You can still enter a custom unprivileged port manually.
-
-If all ports in the automatic range are occupied, Bookmarks asks you to choose a custom port instead of automatically moving into another range.
-
-A launcher is stored as a regular bookmark with additional metadata similar to:
+A new launcher stores provider metadata inside the existing launcher object, for example:
 
 ```json
 {
   "id": "example-id",
   "type": "gotty-launcher",
-  "integration": "gotty",
+  "integration": "ttyd",
   "name": "MC",
   "url": "http://{host}:47200/cb-gotty-example-id/",
   "gottyLauncher": {
-    "binary": "gotty",
+    "provider": "ttyd",
+    "binary": "ttyd",
     "command": "mc",
     "args": [],
     "port": 47200,
@@ -51,48 +34,52 @@ A launcher is stored as a regular bookmark with additional metadata similar to:
 }
 ```
 
-## Runtime model
+## Launcher parameters
 
-Clicking the launcher runs a command equivalent in structure to:
+The manager and card editor expose bookmark name, terminal server, terminal-server executable, application command, application arguments, TCP port, listen address, auto-stop time, group, icon, and accent. Application command, arguments, and listen address continue to support the `{host}` placeholder.
+
+New launchers automatically choose the first unused port in **47200–47299**, skipping configured launcher ports and ports already listening on the host. Custom unprivileged ports are still supported.
+
+## Runtime commands
+
+GoTTY launchers use the established form:
 
 ```text
-systemd-run --user \
-  --unit=cockpit-bookmarks-gotty-<id>.service \
-  --collect \
-  --service-type=exec \
-  --property=RuntimeMaxSec=<seconds> \
-  --property=KillMode=control-group \
-  -- \
-  gotty --address <address> --port <port> --permit-write \
+gotty --address <address> --port <port> --permit-write \
   --path /cb-gotty-<id> \
   <application> <arg1> <arg2> ...
 ```
 
-The application and arguments are passed directly as argv values. Bookmarks does not concatenate them into `sh -c` or another shell command.
+ttyd launchers use the equivalent ttyd form:
 
-If the launcher's user service is already active and the configured port responds, it is reused instead of starting another instance.
+```text
+ttyd --interface <address> --port <port> --writable \
+  --base-path /cb-gotty-<id> \
+  <application> <arg1> <arg2> ...
+```
 
-If another process already owns the configured port, launch is refused rather than opening the wrong service.
+Both commands are wrapped by the same transient `systemd-run --user` service with `RuntimeMaxSec` and `KillMode=control-group`. Application arguments are passed as separate argv values; Bookmarks does not construct a shell command.
+
+If the launcher user service is already active and the configured port responds, it is reused. If another process already owns the port, launch is refused instead of opening an unrelated service.
+
+## Service discovery
+
+**Discover services** recognizes both GoTTY and ttyd listeners. When the process PID is visible, Bookmarks inspects command-line options to infer TLS, writable/read-only mode, authentication presence, and base path.
+
+Basic-auth credential values are redacted on the host before process arguments cross the Cockpit spawn boundary. Bookmarks records only that authentication is present; it does not store the credential value.
+
+GoTTY random-URL mode remains deliberately excluded from automatic bookmark creation because the generated secret path cannot be reconstructed safely.
 
 ## Security
 
-Launcher profiles deliberately run as the **logged-in Cockpit user** through `systemd-run --user`. Bookmarks does not request root privileges for a launcher.
+Launchers run as the **logged-in Cockpit user**, never as root. On-demand launchers enable interactive input (`--permit-write` for GoTTY, `--writable` for ttyd) because terminal applications need keyboard input.
 
-GoTTY is started with `--permit-write` because applications such as MC, btop, and fish need keyboard input. A writable web terminal is sensitive.
+The default listen address is `127.0.0.1`. A browser on another machine normally needs a reachable LAN/VPN address such as `0.0.0.0`, `::`, or a specific interface address. A writable web terminal is sensitive: expose it only on a trusted network or behind suitable firewall/reverse-proxy authentication and TLS controls.
 
-The default listen address is `127.0.0.1`. This is the safest default, but a browser on another computer normally cannot reach the host's loopback interface. For remote access you may choose `0.0.0.0`, `::`, or a specific reachable interface address, but only do this on a trusted LAN/VPN or with appropriate firewall/proxy controls.
-
-On-demand launchers do not store GoTTY credentials and currently start plain HTTP GoTTY. For Internet-facing terminal access, prefer an authenticated/TLS reverse proxy or a separately managed hardened GoTTY deployment instead of an on-demand launcher.
+On-demand launchers do not persist terminal-server credentials and currently start plain HTTP unless you run a separately managed hardened deployment.
 
 ## Requirements
 
-The host needs:
+The host needs either `gotty` or `ttyd` available to the logged-in user, plus the configured terminal application, a working systemd user manager, and `bash`, `timeout`, and `ss` for readiness and port checks.
 
-- `gotty` available to the logged-in user
-- the configured application (`mc`, `btop`, `fish`, etc.)
-- a working systemd user manager (`systemctl --user` / `systemd-run --user`)
-- `bash`, `timeout`, and `ss` for readiness and port checks
-
-## QR and copied URLs
-
-A launcher uses a valid GoTTY URL, so Copy URL and QR code continue to represent the real terminal address. They do **not** start the launcher by themselves. Start the launcher from Cockpit Bookmarks first if the service is currently stopped.
+An absolute path to the terminal-server executable can be configured when it is not present on the systemd user manager's PATH.
