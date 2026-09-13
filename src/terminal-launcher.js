@@ -5,6 +5,7 @@ import { expandUrl, newBookmarkId } from './bookmarks.js';
 // server for both old and new launchers.
 export const GOTTY_LAUNCHER_TYPE = 'gotty-launcher';
 export const TERMINAL_LAUNCHER_TYPE = GOTTY_LAUNCHER_TYPE;
+export const TERMINAL_LAUNCHER_EDIT_EVENT = 'cockpit-bookmarks:edit-terminal-launcher';
 export const GOTTY_LAUNCHER_PATH_PREFIX = '/cb-gotty-';
 export const TERMINAL_PROVIDER_GOTTY = 'gotty';
 export const TERMINAL_PROVIDER_TTYD = 'ttyd';
