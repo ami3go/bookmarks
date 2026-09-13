@@ -6,6 +6,8 @@ The project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-13
+
 ### Added
 
 - Host-side TCP availability indicators for bookmarks, with bounded checks on page load and a manual refresh summary.
@@ -14,14 +16,29 @@ The project follows semantic versioning where practical.
 - Dashboard service summary showing online, offline, and unknown counts.
 - Expanded icon presets and optional theme-safe card accent presets.
 - First-class GoTTY discovery: terminal-specific bookmark defaults, process-aware TLS/base-path inference, credential redaction, `--permit-write` warnings, and safe handling of random-URL mode.
+- On-demand terminal launcher management for both GoTTY and ttyd, including presets, automatic free-port selection, per-launcher auto-stop, and host placeholder expansion.
+- Terminal-provider compatibility checks and process-aware discovery support for GoTTY and ttyd.
+
+### Changed
+
+- New terminal launchers default their listen address to `{host}` while legacy launchers without a stored address continue to fall back to `127.0.0.1`.
+- Terminal launcher editing now uses stable launcher IDs and opens from the standard bookmark Edit workflow.
+- Terminal launcher and service discovery controls are consolidated into the Edit-mode management card alongside Page settings, Import/Export, and History.
+- The Edit-mode management card now places its status text on the top row and keeps all management actions on one horizontal row below it, with horizontal scrolling on narrow screens.
+- Native dropdown controls follow the active Cockpit light/dark theme instead of forcing a light popup surface.
+- Terminal-server and card-accent selectors use the same PatternFly foreground, background, and border tokens as the surrounding form.
+
+### Reliability and compatibility
+
+- Fixed an Edit-mode freeze caused by the terminal-card MutationObserver repeatedly rewriting the Edit button text and retriggering itself.
+- Existing terminal launchers preserve their stored listen addresses and provider behavior.
+- `{host}` is expanded to the current Cockpit hostname/IP before GoTTY or ttyd is started, with regression coverage for the new default and legacy fallback.
+- Existing v0.5 configuration data remains compatible with the v0.6 launcher and management UI changes.
 
 ### Packaging
 
-- Debian revision `0.5.0-2` installs AppStream metainfo under `/usr/share/metainfo/` so Cockpit's Applications page can recognize an installed Cockpit Bookmarks package.
-- The Debian package now declares that it enhances Cockpit and suggests `cockpit-packagekit` for Applications-page management.
-- Debian package tests verify the AppStream component ID, Cockpit extension relationship, `cockpit-manifest` launchable, package relationships, and Node-free rebuild path.
-- Debian revision `0.5.0-3` is the current development package revision and can be exposed through the included local APT test helper to exercise update notifications against a real APT candidate.
-- The local APT test helper creates and removes a temporary trusted `file:` repository under `/var/local/cockpit-bookmarks-apt`; it is for local testing only, not production distribution.
+- Debian revisions `0.5.0-2` and `0.5.0-3` added AppStream metadata, Cockpit package relationships, package tests, and the local APT update-notification test helper during development.
+- The v0.6.0 release resets the Debian package revision to `0.6.0-1`.
 
 ## [0.5.0] - 2026-08-23
 
