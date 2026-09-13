@@ -1,9 +1,15 @@
-import {
-    TERMINAL_PROVIDER_GOTTY,
-    TERMINAL_PROVIDER_TTYD,
-    normalizeTerminalProvider,
-    terminalProviderLabel,
-} from './terminal-launcher.js';
+const TERMINAL_PROVIDER_GOTTY = 'gotty';
+const TERMINAL_PROVIDER_TTYD = 'ttyd';
+
+function normalizeProvider(value) {
+    return String(value || '').toLowerCase() === TERMINAL_PROVIDER_TTYD
+        ? TERMINAL_PROVIDER_TTYD
+        : TERMINAL_PROVIDER_GOTTY;
+}
+
+function providerLabel(value) {
+    return normalizeProvider(value) === TERMINAL_PROVIDER_TTYD ? 'ttyd' : 'GoTTY';
+}
 
 export const MINIMUM_TERMINAL_PROVIDER_VERSIONS = Object.freeze({
     [TERMINAL_PROVIDER_GOTTY]: '1.2.0',
@@ -47,15 +53,15 @@ export function compareTerminalProviderVersions(left, right) {
 }
 
 export function minimumTerminalProviderVersion(provider) {
-    return MINIMUM_TERMINAL_PROVIDER_VERSIONS[normalizeTerminalProvider(provider)];
+    return MINIMUM_TERMINAL_PROVIDER_VERSIONS[normalizeProvider(provider)];
 }
 
 export function requiredTerminalProviderOptions(provider) {
-    return [...REQUIRED_PROVIDER_OPTIONS[normalizeTerminalProvider(provider)]];
+    return [...REQUIRED_PROVIDER_OPTIONS[normalizeProvider(provider)]];
 }
 
 export function evaluateTerminalProviderCompatibility(provider, versionOutput, helpOutput) {
-    const normalizedProvider = normalizeTerminalProvider(provider);
+    const normalizedProvider = normalizeProvider(provider);
     const minimumVersion = minimumTerminalProviderVersion(normalizedProvider);
     const version = parseTerminalProviderVersion(versionOutput);
     const requiredOptions = requiredTerminalProviderOptions(normalizedProvider);
@@ -75,7 +81,7 @@ export function evaluateTerminalProviderCompatibility(provider, versionOutput, h
 
     return {
         provider: normalizedProvider,
-        label: terminalProviderLabel(normalizedProvider),
+        label: providerLabel(normalizedProvider),
         available: true,
         supported,
         reason,
@@ -97,8 +103,8 @@ function errorText(cockpit, error) {
 }
 
 export async function checkTerminalProviderCompatibility(cockpit, provider, binary) {
-    const normalizedProvider = normalizeTerminalProvider(provider);
-    const label = terminalProviderLabel(normalizedProvider);
+    const normalizedProvider = normalizeProvider(provider);
+    const label = providerLabel(normalizedProvider);
     const executable = cleanText(binary);
     const minimumVersion = minimumTerminalProviderVersion(normalizedProvider);
 
@@ -188,7 +194,7 @@ export function terminalProviderCompatibilityMessage(result) {
     if (!result)
         return '';
 
-    const label = result.label || terminalProviderLabel(result.provider);
+    const label = result.label || providerLabel(result.provider);
     const binary = result.binary ? ` (${result.binary})` : '';
 
     if (!result.available) {
