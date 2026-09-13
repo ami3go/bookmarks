@@ -1,3 +1,9 @@
+.terminal-provider-compatibility-notices {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1rem 1.5rem 0;
+}
+
 .gotty-launcher-manager-floating {
     position: fixed;
     left: 1.25rem;
@@ -71,6 +77,10 @@
 }
 
 @media (max-width: 720px) {
+    .terminal-provider-compatibility-notices {
+        padding: 0.75rem 1rem 0;
+    }
+
     .gotty-launcher-manager-floating {
         left: 1rem;
         bottom: 1rem;

@@ -15,21 +15,23 @@ import './service-discovery.css';
 import './gotty-launcher-manager.css';
 import './update-notification.css';
 import { Application } from './app.jsx';
-import { GoTTYCardEditor } from './gotty-card-editor.jsx';
-import { GoTTYLauncherManager } from './gotty-launcher-manager.jsx';
-import { installGoTTYLauncherOpenInterceptor } from './gotty-launcher.js';
+import { TerminalCardEditor } from './terminal-card-editor.jsx';
+import { TerminalLauncherManager } from './terminal-launcher-manager.jsx';
+import { TerminalProviderCompatibilityNotifier } from './terminal-provider-compatibility-notifier.jsx';
+import { installTerminalLauncherOpenInterceptor } from './terminal-launcher.js';
 import { UpdateNotification } from './update-notification.jsx';
 
-installGoTTYLauncherOpenInterceptor();
+installTerminalLauncherOpenInterceptor();
 
 document.addEventListener('DOMContentLoaded', () => {
     const root = document.getElementById('app');
     createRoot(root).render(
         <>
             <UpdateNotification />
+            <TerminalProviderCompatibilityNotifier />
             <Application />
-            <GoTTYCardEditor />
-            <GoTTYLauncherManager />
+            <TerminalCardEditor />
+            <TerminalLauncherManager />
         </>
     );
 });
