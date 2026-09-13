@@ -7,36 +7,32 @@
 }
 
 /*
- * Native select/datalist popups are painted by the browser rather than
- * PatternFly. Some browsers keep a light popup surface even when the page is
- * in a dark color scheme, and may ignore option background colors. In that
- * case CanvasText can otherwise resolve to a light value and become unreadable
- * on the browser-owned white popup.
- *
- * Keep the closed controls themed by Cockpit/PatternFly, but force the native
- * popup hosts to use a light UA color scheme. This guarantees a readable dark
- * CanvasText fallback on light browser-owned popup surfaces in both Cockpit
- * themes.
+ * Native select/datalist popups are browser-owned, so give them the same
+ * light/dark color scheme as Cockpit instead of forcing a light popup. The
+ * explicit PatternFly colors keep the closed controls and option lists
+ * consistent with the surrounding form where the browser allows option
+ * styling.
  */
 .bookmarks-group-filter select,
 .bookmark-select,
 #bookmark-group {
     color-scheme: light;
+    color: var(--pf-t--global--text--color--regular, CanvasText);
+    background-color: var(--pf-t--global--background--color--primary--default, Canvas);
+    border-color: var(--pf-t--global--border--color--default, currentcolor);
 }
 
-/*
- * .bookmark-select is used by terminal-server and card-accent fields. Because
- * its UA color scheme is deliberately light for the popup, explicitly paint
- * the closed control with PatternFly tokens so dark Cockpit does not inherit
- * white text onto a browser-owned light select background.
- */
+:root.pf-v6-theme-dark .bookmarks-group-filter select,
+:root.pf-v6-theme-dark .bookmark-select,
+:root.pf-v6-theme-dark #bookmark-group {
+    color-scheme: dark;
+}
+
 .bookmark-select {
     box-sizing: border-box;
     width: 100%;
     min-height: 2.25rem;
     padding: 0.35rem 2rem 0.35rem 0.65rem;
-    color: var(--pf-t--global--text--color--regular, CanvasText);
-    background-color: var(--pf-t--global--background--color--primary--default, Canvas);
     border: 1px solid var(--pf-t--global--border--color--default, currentcolor);
     border-radius: 3px;
     font: inherit;
@@ -45,6 +41,6 @@
 .bookmarks-group-filter select option,
 .bookmark-select option,
 #bookmark-group-options option {
-    color: CanvasText;
-    background-color: Canvas;
+    color: var(--pf-t--global--text--color--regular, CanvasText);
+    background-color: var(--pf-t--global--background--color--primary--default, Canvas);
 }
