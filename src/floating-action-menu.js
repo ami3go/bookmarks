@@ -1,9 +1,22 @@
 const MENU_SELECTOR = 'details.bookmark-action-menu';
 const SOURCE_MENU_SELECTOR = '.bookmark-action-menu-list';
+const MANAGEMENT_ACTIONS_SELECTOR = '.bookmarks-management-actions';
 const VIEWPORT_PADDING = 8;
 const MENU_GAP = 6;
 
+const MANAGEMENT_LAUNCHERS = [
+    {
+        key: 'terminal-launchers',
+        sourceSelector: '.gotty-launcher-manager-floating > button',
+    },
+    {
+        key: 'discover-services',
+        sourceSelector: '.bookmarks-discovery-floating > .bookmarks-discovery-launcher',
+    },
+];
+
 let activeMenu = null;
+let managementObserver = null;
 
 function clamp(value, minimum, maximum) {
     return Math.min(Math.max(value, minimum), maximum);
@@ -95,6 +108,81 @@ function openFloatingMenu(details) {
     cloneMenu(sourceMenu, details, trigger);
 }
 
+function removeManagementProxy(key) {
+    document.querySelector(`[data-bookmarks-management-proxy="${key}"]`)?.remove();
+}
+
+function syncManagementProxy(actions, definition) {
+    const source = document.querySelector(definition.sourceSelector);
+    let proxy = document.querySelector(`[data-bookmarks-management-proxy="${definition.key}"]`);
+
+    if (!actions || !source) {
+        proxy?.remove();
+        return;
+    }
+
+    if (!proxy) {
+        proxy = document.createElement('button');
+        proxy.type = 'button';
+        proxy.dataset.bookmarksManagementProxy = definition.key;
+        proxy.addEventListener('click', () => {
+            const currentSource = document.querySelector(definition.sourceSelector);
+            if (currentSource && !currentSource.disabled)
+                currentSource.click();
+        });
+        actions.appendChild(proxy);
+    } else if (proxy.parentElement !== actions) {
+        actions.appendChild(proxy);
+    }
+
+    if (proxy.className !== source.className)
+        proxy.className = source.className;
+    if (proxy.disabled !== source.disabled)
+        proxy.disabled = source.disabled;
+    if (proxy.innerHTML !== source.innerHTML)
+        proxy.innerHTML = source.innerHTML;
+
+    const ariaLabel = source.getAttribute('aria-label');
+    if (ariaLabel && proxy.getAttribute('aria-label') !== ariaLabel)
+        proxy.setAttribute('aria-label', ariaLabel);
+    else if (!ariaLabel && proxy.hasAttribute('aria-label'))
+        proxy.removeAttribute('aria-label');
+
+    const title = source.getAttribute('title');
+    if (title && proxy.getAttribute('title') !== title)
+        proxy.setAttribute('title', title);
+    else if (!title && proxy.hasAttribute('title'))
+        proxy.removeAttribute('title');
+}
+
+function syncManagementLaunchers() {
+    const actions = document.querySelector(MANAGEMENT_ACTIONS_SELECTOR);
+
+    if (!actions) {
+        for (const definition of MANAGEMENT_LAUNCHERS)
+            removeManagementProxy(definition.key);
+        return;
+    }
+
+    for (const definition of MANAGEMENT_LAUNCHERS)
+        syncManagementProxy(actions, definition);
+}
+
+function installManagementLauncherSync() {
+    if (managementObserver || !document.body)
+        return;
+
+    syncManagementLaunchers();
+    managementObserver = new MutationObserver(syncManagementLaunchers);
+    managementObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'disabled', 'aria-label', 'title'],
+        characterData: true,
+    });
+}
+
 document.addEventListener('toggle', event => {
     const details = event.target;
     if (!(details instanceof HTMLDetailsElement) || !details.matches(MENU_SELECTOR))
@@ -128,3 +216,8 @@ document.addEventListener('keydown', event => {
 
 window.addEventListener('scroll', () => closeFloatingMenu(), true);
 window.addEventListener('resize', () => closeFloatingMenu());
+
+if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', installManagementLauncherSync, { once: true });
+else
+    installManagementLauncherSync();
