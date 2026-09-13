@@ -34,6 +34,17 @@ A new launcher stores provider metadata inside the existing launcher object, for
 }
 ```
 
+## Version and fork compatibility
+
+Cockpit Bookmarks checks every configured terminal-server executable using both `--version` and `--help`. This is intentionally stricter than trusting the version string alone because old or incompatible forks may report a plausible version while missing command-line options required by the launcher.
+
+The minimum supported versions are:
+
+- **GoTTY 1.2.0 or newer** — the launcher requires `--address`, `--port`, `--permit-write`, and `--path`. Legacy GoTTY releases and forks without `--path` are unsupported.
+- **ttyd 1.7.4 or newer** — the launcher requires `--interface`, `--port`, `--writable`, and `--base-path`. Older ttyd builds using the historical `--readonly` behavior are unsupported.
+
+When a configured binary is too old, cannot be executed, or is missing one of the required options, the dashboard displays a danger alert explaining the detected version and the missing compatibility requirement. If a custom build does not expose a parseable semantic version but does provide every required option, Bookmarks treats it as capability-compatible and displays a warning that the exact version could not be verified.
+
 ## Launcher parameters
 
 The manager and card editor expose bookmark name, terminal server, terminal-server executable, application command, application arguments, TCP port, listen address, auto-stop time, group, icon, and accent. Application command, arguments, and listen address continue to support the `{host}` placeholder.
