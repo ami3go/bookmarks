@@ -24,6 +24,24 @@
     color-scheme: light;
 }
 
+/*
+ * .bookmark-select is used by terminal-server and card-accent fields. Because
+ * its UA color scheme is deliberately light for the popup, explicitly paint
+ * the closed control with PatternFly tokens so dark Cockpit does not inherit
+ * white text onto a browser-owned light select background.
+ */
+.bookmark-select {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.25rem;
+    padding: 0.35rem 2rem 0.35rem 0.65rem;
+    color: var(--pf-t--global--text--color--regular, CanvasText);
+    background-color: var(--pf-t--global--background--color--primary--default, Canvas);
+    border: 1px solid var(--pf-t--global--border--color--default, currentcolor);
+    border-radius: 3px;
+    font: inherit;
+}
+
 .bookmarks-group-filter select option,
 .bookmark-select option,
 #bookmark-group-options option {
