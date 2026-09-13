@@ -3,6 +3,7 @@ name: Release
 on:
   workflow_dispatch:
   # Workflow changes merged to main deliberately exercise the full release path.
+  # v0.6.0 release trigger: keep the automated test/build/publish path authoritative.
   push:
     branches:
       - main
