@@ -41,6 +41,21 @@ test('legacy launcher data without provider stays GoTTY', () => {
     assert.equal(draft.binary, '/usr/local/bin/gotty');
 });
 
+test('new launcher drafts listen on the Cockpit host while legacy fallback stays local', () => {
+    const draft = launcherDraft(null, 47202);
+    assert.equal(draft.address, '{host}');
+    assert.equal(draft.port, '47202');
+
+    const legacy = normalizeTerminalLauncher({ binary: 'gotty', command: 'bash', port: 47203 });
+    assert.equal(legacy.address, '127.0.0.1');
+
+    const service = buildLauncherService({ ...BASE, address: '{host}' });
+    const argv = buildSystemdRunArguments(service, '192.168.1.20');
+    const addressIndex = argv.indexOf('--address');
+    assert.ok(addressIndex > 0);
+    assert.equal(argv[addressIndex + 1], '192.168.1.20');
+});
+
 test('provider helpers expose GoTTY and ttyd defaults', () => {
     assert.equal(defaultBinaryForProvider(TERMINAL_PROVIDER_GOTTY), 'gotty');
     assert.equal(defaultBinaryForProvider(TERMINAL_PROVIDER_TTYD), 'ttyd');
