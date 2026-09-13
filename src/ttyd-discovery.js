@@ -102,6 +102,10 @@ export function parseTtydCommandLine(commandLine) {
             result.path = normalizePath(argument.slice('--base-path='.length));
             continue;
         }
+        if (argument.startsWith('-b=')) {
+            result.path = normalizePath(argument.slice(3));
+            continue;
+        }
         if (argument.startsWith('--credential=') || argument.startsWith('-c=')) {
             result.authentication = true;
             continue;
