@@ -25,14 +25,26 @@
 }
 
 .bookmark-edit-mode-toggle {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 2.5rem !important;
+    width: 2.5rem;
+    min-width: 2.5rem;
+    max-width: 2.5rem;
+    height: 2.5rem;
+    min-height: 2.5rem;
+    max-height: 2.5rem;
+    padding: 0;
     margin-left: 0;
 }
 
 /*
  * The header is intentionally a single non-wrapping strip. Search visibility
- * only adds or removes one flex item; it must never change the placement of
- * Add bookmark, Add app, or Edit. On narrow Cockpit viewports the strip scrolls
- * horizontally instead of wrapping the Edit button onto another line.
+ * only adds or removes one flex item; it must never change the placement or
+ * size of Add bookmark, Add app, or Edit. On narrow Cockpit viewports the strip
+ * scrolls horizontally instead of wrapping the Edit button onto another line.
  */
 
 @media (max-width: 720px) {
