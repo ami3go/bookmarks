@@ -37,10 +37,14 @@
 
 .bookmarks-header-actions {
     display: grid;
-    grid-template-columns: minmax(14rem, 1fr) minmax(9rem, auto) auto auto;
+    grid-template-columns: minmax(14rem, 1fr) minmax(9rem, auto) auto auto auto;
     align-items: center;
     gap: 0.75rem;
     width: min(52rem, 100%);
+}
+
+.bookmarks-header-actions > .pf-v6-c-button {
+    grid-row: 1;
 }
 
 .bookmarks-group-filter select {
@@ -470,12 +474,16 @@
     }
 
     .bookmarks-header-actions {
-        grid-template-columns: 1fr auto;
+        grid-template-columns: minmax(0, 1fr) auto auto auto;
     }
 
-    .bookmarks-header-actions > :first-child,
+    .bookmarks-search,
     .bookmarks-group-filter {
         grid-column: 1 / -1;
+    }
+
+    .bookmarks-header-actions > .pf-v6-c-button {
+        grid-row: auto;
     }
 
     .bookmarks-management-bar {
