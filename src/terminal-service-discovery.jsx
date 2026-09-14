@@ -37,7 +37,7 @@ function terminalInspectionText(candidate) {
     return '';
 }
 
-export function ServiceDiscovery({ visible = true, onOpenChange }) {
+export function ServiceDiscovery({ visible = true, onOpenChange, inline = false }) {
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
@@ -148,7 +148,7 @@ export function ServiceDiscovery({ visible = true, onOpenChange }) {
         return null;
 
     return (
-        <div className="bookmarks-discovery-floating">
+        <div className={inline ? 'bookmarks-discovery-inline' : 'bookmarks-discovery-floating'}>
             <Button className="bookmarks-discovery-launcher" variant="secondary" onClick={discover} isDisabled={loading || saving}>
                 {loading ? 'Scanning ports…' : 'Discover services'}
             </Button>
