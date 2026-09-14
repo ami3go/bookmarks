@@ -7,9 +7,11 @@ const index = fs.readFileSync(new URL('../src/index.jsx', import.meta.url), 'utf
 
 test('launcher card editing is composed directly without DOM interception or custom edit events', () => {
     assert.match(app, /<LauncherEditorDialog/);
+    assert.match(app, /function launcherEditorType\(service\)/);
+    assert.match(app, /service\?\.type === TERMINAL_LAUNCHER_TYPE/);
+    assert.match(app, /service\?\.type === APPLICATION_LAUNCHER_TYPE/);
+    assert.match(app, /const launcherType = launcherEditorType\(storedService\)/);
     assert.match(app, /setLauncherEditorService\(storedService\)/);
-    assert.match(app, /storedService\.type === TERMINAL_LAUNCHER_TYPE/);
-    assert.match(app, /storedService\.type === APPLICATION_LAUNCHER_TYPE/);
     assert.doesNotMatch(app, /dispatchEvent\(new CustomEvent\(TERMINAL_LAUNCHER_EDIT_EVENT/);
     assert.doesNotMatch(index, /<TerminalCardEditor/);
     assert.doesNotMatch(index, /<ApplicationCardEditor/);
