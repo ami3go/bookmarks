@@ -1,3 +1,5 @@
+import { ADD_APP_EVENT } from './add-app.js';
+
 const HEADER_ACTIONS_CLASS = 'has-add-app';
 const HEADER_ACTIONS_STYLE_ID = 'bookmarks-add-app-header-layout';
 const ADD_BOOKMARK_CLASS = 'bookmarks-add-bookmark-action';
@@ -76,7 +78,7 @@ function createProxy(source) {
     button.addEventListener('click', event => {
         event.preventDefault();
         event.stopPropagation();
-        sourceButton()?.click();
+        window.dispatchEvent(new CustomEvent(ADD_APP_EVENT));
     });
     return button;
 }

@@ -15,6 +15,7 @@ import './service-discovery.css';
 import './gotty-launcher-manager.css';
 import './application-launcher-manager.css';
 import './update-notification.css';
+import { AddAppManager } from './add-app-manager.jsx';
 import { Application } from './app.jsx';
 import { ApplicationCardEditor } from './application-card-editor.jsx';
 import { ApplicationLauncherManager } from './application-launcher-manager.jsx';
@@ -40,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <Application />
             <TerminalCardEditor />
             <ApplicationCardEditor />
+            <AddAppManager />
             <TerminalLauncherManager />
             <ApplicationLauncherManager />
         </>
