@@ -16,7 +16,9 @@ import {
     validateApplicationDraft,
 } from '../src/application-launcher.js';
 import {
+    AGENT_OF_EMPIRES_DEFAULT_PORT,
     APPLICATION_LAUNCHER_PORT_START,
+    suggestAgentOfEmpiresPort,
     suggestApplicationLauncherPort,
 } from '../src/application-launcher-ports.js';
 
@@ -55,6 +57,13 @@ test('builds Agent of Empires preset without persisting an auth token', () => {
     assert.deepEqual(service.applicationLauncher.urlArgs, ['url']);
     assert.equal(service.url.includes('token='), false);
     assert.equal(JSON.stringify(service).includes('token='), false);
+
+    const argv = buildApplicationSystemdRunArguments(service, 'mini-pc.local');
+    const commandIndex = argv.indexOf('aoe');
+    assert.ok(commandIndex > 0);
+    assert.deepEqual(argv.slice(commandIndex), [
+        'aoe', 'serve', '--host', '0.0.0.0', '--port', '47300', '--allowed-host', 'mini-pc.local',
+    ]);
 });
 
 test('passes web application arguments directly without a shell', () => {
@@ -119,5 +128,17 @@ test('allocates web application ports without colliding with saved launchers or 
     assert.equal(
         suggestApplicationLauncherPort(services, [APPLICATION_LAUNCHER_PORT_START + 2]),
         APPLICATION_LAUNCHER_PORT_START + 3
+    );
+});
+
+test('Agent of Empires prefers port 8080 and falls back to managed application ports', () => {
+    assert.equal(suggestAgentOfEmpiresPort([], []), AGENT_OF_EMPIRES_DEFAULT_PORT);
+    assert.equal(
+        suggestAgentOfEmpiresPort([], [AGENT_OF_EMPIRES_DEFAULT_PORT]),
+        APPLICATION_LAUNCHER_PORT_START
+    );
+    assert.equal(
+        suggestAgentOfEmpiresPort([{ applicationLauncher: { port: AGENT_OF_EMPIRES_DEFAULT_PORT } }], []),
+        APPLICATION_LAUNCHER_PORT_START
     );
 });
