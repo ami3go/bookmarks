@@ -35,18 +35,6 @@
     opacity: 0.75;
 }
 
-.bookmarks-header-actions {
-    display: grid;
-    grid-template-columns: minmax(14rem, 1fr) minmax(9rem, auto) auto auto auto;
-    align-items: center;
-    gap: 0.75rem;
-    width: min(52rem, 100%);
-}
-
-.bookmarks-header-actions > .pf-v6-c-button {
-    grid-row: 1;
-}
-
 .bookmarks-group-filter select {
     box-sizing: border-box;
     width: 100%;
@@ -58,10 +46,6 @@
     border-radius: 3px;
     font: inherit;
     opacity: 0.9;
-}
-
-.bookmark-edit-mode-toggle {
-    min-width: 2.5rem;
 }
 
 .bookmark-edit-mode-toggle svg {
@@ -473,19 +457,6 @@
         padding: 1rem;
     }
 
-    .bookmarks-header-actions {
-        grid-template-columns: minmax(0, 1fr) auto auto auto;
-    }
-
-    .bookmarks-search,
-    .bookmarks-group-filter {
-        grid-column: 1 / -1;
-    }
-
-    .bookmarks-header-actions > .pf-v6-c-button {
-        grid-row: auto;
-    }
-
     .bookmarks-management-bar {
         align-items: stretch;
         flex-direction: column;
@@ -493,10 +464,6 @@
 
     .bookmarks-management-actions {
         justify-content: flex-start;
-    }
-
-    .bookmark-edit-mode-toggle {
-        justify-self: end;
     }
 
     .bookmarks-history-item {
