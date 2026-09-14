@@ -1,0 +1,53 @@
+name: Patch GoTTY card editor
+
+on:
+  push:
+    branches:
+      - feature-edit-gotty-card
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[edit-gotty-card]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature-edit-gotty-card
+          fetch-depth: 0
+      - name: Route GoTTY card edit to launcher editor
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          sections = Path('src/bookmark-sections.jsx')
+          text = sections.read_text()
+          old = """onClick={event => {\n                                                                                    closeActionMenu(event);\n                                                                                    onOpenEdit(service);\n                                                                                }}\n                                                                                disabled={saving}\n                                                                            >\n                                                                                Edit\n"""
+          new = """onClick={event => {\n                                                                                    closeActionMenu(event);\n                                                                                    if (service.type === 'gotty-launcher') {\n                                                                                        window.dispatchEvent(new CustomEvent('cockpit-bookmarks:edit-gotty-launcher', {\n                                                                                            detail: { id: service.id },\n                                                                                        }));\n                                                                                    } else {\n                                                                                        onOpenEdit(service);\n                                                                                    }\n                                                                                }}\n                                                                                disabled={saving}\n                                                                            >\n                                                                                {service.type === 'gotty-launcher' ? 'Edit GoTTY launcher…' : 'Edit'}\n"""
+          if old not in text:
+              raise SystemExit('bookmark-sections edit action pattern not found')
+          sections.write_text(text.replace(old, new, 1))
+
+          manager = Path('src/gotty-launcher-manager.jsx')
+          text = manager.read_text()
+          anchor = """    useEffect(() => {\n        const permission = window.cockpit.permission({ admin: true });\n        const update = () => setAllowed(permission.allowed === true);\n        update();\n        permission.addEventListener('changed', update);\n        return () => {\n            permission.removeEventListener('changed', update);\n            permission.close();\n        };\n    }, []);\n\n"""
+          addition = anchor + """    useEffect(() => {\n        const handleEditRequest = async event => {\n            const id = String(event.detail?.id || '');\n            if (!id)\n                return;\n\n            setNotice('');\n            try {\n                const config = await readConfiguration();\n                const currentLaunchers = launchersFrom(config);\n                const service = currentLaunchers.find(item => item?.id === id);\n                setLaunchers(currentLaunchers);\n                setOpen(true);\n                if (!service) {\n                    setDraft(null);\n                    setEditingId(null);\n                    setNotice('The GoTTY launcher no longer exists. Reload the page and try again.');\n                    return;\n                }\n\n                setDraft(launcherDraft(service));\n                setEditingId(service.id);\n                setErrors({});\n            } catch (error) {\n                setDraft(null);\n                setEditingId(null);\n                setOpen(true);\n                setNotice(`Could not open launcher editor: ${messageFor(error)}`);\n            }\n        };\n\n        window.addEventListener('cockpit-bookmarks:edit-gotty-launcher', handleEditRequest);\n        return () => window.removeEventListener('cockpit-bookmarks:edit-gotty-launcher', handleEditRequest);\n    }, []);\n\n"""
+          if anchor not in text:
+              raise SystemExit('launcher manager permission effect pattern not found')
+          manager.write_text(text.replace(anchor, addition, 1))
+
+          test = Path('tests/gotty-launcher-card-edit.test.mjs')
+          test.write_text("""import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport fs from 'node:fs';\n\nconst sections = fs.readFileSync(new URL('../src/bookmark-sections.jsx', import.meta.url), 'utf8');\nconst manager = fs.readFileSync(new URL('../src/gotty-launcher-manager.jsx', import.meta.url), 'utf8');\n\ntest('GoTTY card Edit action routes to the launcher-specific editor', () => {\n    assert.match(sections, /cockpit-bookmarks:edit-gotty-launcher/);\n    assert.match(sections, /Edit GoTTY launcher/);\n    assert.match(manager, /addEventListener\\('cockpit-bookmarks:edit-gotty-launcher'/);\n    assert.match(manager, /setDraft\\(launcherDraft\\(service\\)\\)/);\n});\n""")
+
+          workflow = Path('.github/workflows/patch-edit-gotty-card.yml')
+          workflow.unlink()
+          PY
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git commit -m "Route GoTTY card edit to launcher editor [edit-gotty-card]"
+          git push origin HEAD:feature-edit-gotty-card
