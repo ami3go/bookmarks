@@ -8,6 +8,7 @@ import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput/
 
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import {
+    TERMINAL_LAUNCHER_EDIT_EVENT,
     TERMINAL_LAUNCHER_TYPE,
     TERMINAL_PROVIDER_GOTTY,
     TERMINAL_PROVIDER_TTYD,
@@ -64,6 +65,42 @@ export function TerminalLauncherManager() {
             permission.removeEventListener('changed', updatePermission);
             permission.close();
         };
+    }, []);
+
+    useEffect(() => {
+        const handleEditRequest = async event => {
+            const id = String(event.detail?.id || '');
+            if (!id)
+                return;
+
+            setNotice('');
+            try {
+                const config = await readConfiguration();
+                const currentLaunchers = launchersFrom(config);
+                const service = currentLaunchers.find(item => item?.id === id);
+                setLaunchers(currentLaunchers);
+                setOpen(true);
+
+                if (!service) {
+                    setDraft(null);
+                    setEditingId(null);
+                    setNotice('The terminal launcher no longer exists. Reload the page and try again.');
+                    return;
+                }
+
+                setDraft(launcherDraft(service));
+                setEditingId(service.id);
+                setErrors({});
+            } catch (error) {
+                setDraft(null);
+                setEditingId(null);
+                setOpen(true);
+                setNotice(`Could not open launcher editor: ${messageFor(error)}`);
+            }
+        };
+
+        window.addEventListener(TERMINAL_LAUNCHER_EDIT_EVENT, handleEditRequest);
+        return () => window.removeEventListener(TERMINAL_LAUNCHER_EDIT_EVENT, handleEditRequest);
     }, []);
 
     const refresh = async () => {
