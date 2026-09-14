@@ -4,6 +4,7 @@ import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.
 import { Form } from '@patternfly/react-core/dist/esm/components/Form/index.js';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal/index.js';
 
+import { useAdminPermission } from './app-providers.jsx';
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import {
     GOTTY_LAUNCHER_PORT_END,
@@ -41,7 +42,7 @@ function messageFor(error) {
 }
 
 export function TerminalLauncherManager({ inline = false, visible = true, onOpenChange }) {
-    const [allowed, setAllowed] = useState(false);
+    const allowed = useAdminPermission();
     const [open, setOpen] = useState(false);
     const [launchers, setLaunchers] = useState([]);
     const [draft, setDraft] = useState(null);
@@ -52,19 +53,9 @@ export function TerminalLauncherManager({ inline = false, visible = true, onOpen
     const [allocatingPort, setAllocatingPort] = useState(false);
 
     useEffect(() => {
-        const permission = window.cockpit.permission({ admin: true });
-        const updatePermission = () => {
-            setAllowed(permission.allowed === true);
-            if (permission.allowed !== true)
-                setOpen(false);
-        };
-        updatePermission();
-        permission.addEventListener('changed', updatePermission);
-        return () => {
-            permission.removeEventListener('changed', updatePermission);
-            permission.close();
-        };
-    }, []);
+        if (allowed === false)
+            setOpen(false);
+    }, [allowed]);
 
     useEffect(() => {
         onOpenChange?.(open);
@@ -210,7 +201,7 @@ export function TerminalLauncherManager({ inline = false, visible = true, onOpen
         }
     };
 
-    if (!allowed)
+    if (allowed !== true)
         return null;
 
     return (
