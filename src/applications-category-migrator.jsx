@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
-import { modifyConfiguration, watchConfiguration } from './cockpit-config.js';
+import { useAdminPermission, useConfiguration } from './app-providers.jsx';
+import { modifyConfiguration } from './cockpit-config.js';
 import { APPLICATION_LAUNCHER_TYPE } from './application-launcher.js';
 import { TERMINAL_LAUNCHER_TYPE } from './terminal-launcher.js';
 
@@ -14,44 +15,14 @@ function needsMigration(config) {
 }
 
 export function ApplicationsCategoryMigrator() {
-    const [allowed, setAllowed] = useState(false);
-    const configRef = useRef(null);
+    const { config } = useConfiguration();
+    const allowed = useAdminPermission();
     const migratingRef = useRef(false);
 
-    useEffect(() => watchConfiguration(config => {
-        configRef.current = config;
+    useEffect(() => {
         if (!allowed || migratingRef.current || !needsMigration(config))
             return;
-        migratingRef.current = true;
-        modifyConfiguration(current => ({
-            ...current,
-            services: current.services.map(service => {
-                if (service?.type !== TERMINAL_LAUNCHER_TYPE && service?.type !== APPLICATION_LAUNCHER_TYPE)
-                    return service;
-                if (String(service.group || '').trim() === APPLICATIONS_GROUP)
-                    return service;
-                return { ...service, group: APPLICATIONS_GROUP };
-            }),
-        }), 'Moved application launchers to Applications category')
-            .catch(() => {})
-            .finally(() => { migratingRef.current = false; });
-    }), [allowed]);
 
-    useEffect(() => {
-        const permission = window.cockpit.permission({ admin: true });
-        const update = () => setAllowed(permission.allowed === true);
-        update();
-        permission.addEventListener('changed', update);
-        return () => {
-            permission.removeEventListener('changed', update);
-            permission.close();
-        };
-    }, []);
-
-    useEffect(() => {
-        const config = configRef.current;
-        if (!allowed || migratingRef.current || !needsMigration(config))
-            return;
         migratingRef.current = true;
         modifyConfiguration(current => ({
             ...current,
@@ -63,7 +34,7 @@ export function ApplicationsCategoryMigrator() {
         }), 'Moved application launchers to Applications category')
             .catch(() => {})
             .finally(() => { migratingRef.current = false; });
-    }, [allowed]);
+    }, [allowed, config]);
 
     return null;
 }
