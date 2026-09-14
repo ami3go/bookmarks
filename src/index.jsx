@@ -18,6 +18,7 @@ import { Application } from './app.jsx';
 import { GoTTYCardEditor } from './gotty-card-editor.jsx';
 import { GoTTYLauncherManager } from './gotty-launcher-manager.jsx';
 import { installGoTTYLauncherOpenInterceptor } from './gotty-launcher.js';
+import { installGoTTYLauncherToolbarPlacement } from './gotty-launcher-toolbar.js';
 import { UpdateNotification } from './update-notification.jsx';
 
 installGoTTYLauncherOpenInterceptor();
@@ -32,4 +33,5 @@ document.addEventListener('DOMContentLoaded', () => {
             <GoTTYLauncherManager />
         </>
     );
+    installGoTTYLauncherToolbarPlacement();
 });
