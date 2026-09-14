@@ -1,0 +1,36 @@
+.bookmarks-header-actions {
+    grid-template-columns: minmax(14rem, 1fr) minmax(9rem, auto) auto auto auto;
+}
+
+@media (max-width: 720px) {
+    .bookmarks-header-actions {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+
+    .bookmarks-header-actions > .bookmarks-search {
+        grid-column: 1 / -1;
+        grid-row: 1;
+    }
+
+    .bookmarks-header-actions > .bookmarks-group-filter {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .bookmarks-header-actions > button:nth-of-type(1) {
+        grid-column: 1;
+        grid-row: 3;
+        justify-self: end;
+    }
+
+    .bookmarks-header-actions > button:nth-of-type(2) {
+        grid-column: 2;
+        grid-row: 3;
+    }
+
+    .bookmarks-header-actions > .bookmark-edit-mode-toggle {
+        grid-column: 3;
+        grid-row: 3;
+        justify-self: end;
+    }
+}
