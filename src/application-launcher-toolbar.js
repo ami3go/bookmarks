@@ -2,9 +2,15 @@ function sourceButton() {
     return document.querySelector('.application-launcher-manager-floating > button');
 }
 
+function addBookmarkButton() {
+    return [...document.querySelectorAll('.bookmarks-header-actions > button')]
+        .find(button => button.textContent.trim() === 'Add bookmark');
+}
+
 function createProxy(source) {
     const button = source.cloneNode(true);
     button.removeAttribute('id');
+    button.textContent = 'Add app';
     button.dataset.applicationLauncherToolbarAction = 'true';
     button.addEventListener('click', event => {
         event.preventDefault();
@@ -22,10 +28,10 @@ export function installApplicationLauncherToolbarPlacement() {
     let proxy = null;
 
     const place = () => {
-        const actions = document.querySelector('.bookmarks-management-actions');
+        const anchor = addBookmarkButton();
         const source = sourceButton();
 
-        if (!actions || !source) {
+        if (!anchor || !source) {
             if (proxy?.isConnected)
                 proxy.remove();
             return;
@@ -35,8 +41,8 @@ export function installApplicationLauncherToolbarPlacement() {
             proxy = createProxy(source);
 
         proxy.disabled = source.disabled;
-        if (proxy.parentElement !== actions || actions.firstElementChild !== proxy)
-            actions.prepend(proxy);
+        if (anchor.nextElementSibling !== proxy)
+            anchor.insertAdjacentElement('afterend', proxy);
     };
 
     const observer = new MutationObserver(place);
