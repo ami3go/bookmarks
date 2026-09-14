@@ -114,6 +114,41 @@ export function GoTTYLauncherManager() {
         };
     }, []);
 
+    useEffect(() => {
+        const handleEditRequest = async event => {
+            const id = String(event.detail?.id || '');
+            if (!id)
+                return;
+
+            setNotice('');
+            try {
+                const config = await readConfiguration();
+                const currentLaunchers = launchersFrom(config);
+                const service = currentLaunchers.find(item => item?.id === id);
+                setLaunchers(currentLaunchers);
+                setOpen(true);
+                if (!service) {
+                    setDraft(null);
+                    setEditingId(null);
+                    setNotice('The GoTTY launcher no longer exists. Reload the page and try again.');
+                    return;
+                }
+
+                setDraft(launcherDraft(service));
+                setEditingId(service.id);
+                setErrors({});
+            } catch (error) {
+                setDraft(null);
+                setEditingId(null);
+                setOpen(true);
+                setNotice(`Could not open launcher editor: ${messageFor(error)}`);
+            }
+        };
+
+        window.addEventListener('cockpit-bookmarks:edit-gotty-launcher', handleEditRequest);
+        return () => window.removeEventListener('cockpit-bookmarks:edit-gotty-launcher', handleEditRequest);
+    }, []);
+
     const refresh = async () => {
         const config = await readConfiguration();
         setLaunchers(launchersFrom(config));

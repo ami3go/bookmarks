@@ -329,11 +329,17 @@ export function BookmarkSections({
                                                                                 className="bookmark-action-menu-item"
                                                                                 onClick={event => {
                                                                                     closeActionMenu(event);
-                                                                                    onOpenEdit(service);
+                                                                                    if (service.type === 'gotty-launcher') {
+                                                                                        window.dispatchEvent(new CustomEvent('cockpit-bookmarks:edit-gotty-launcher', {
+                                                                                            detail: { id: service.id },
+                                                                                        }));
+                                                                                    } else {
+                                                                                        onOpenEdit(service);
+                                                                                    }
                                                                                 }}
                                                                                 disabled={saving}
                                                                             >
-                                                                                Edit
+                                                                                {service.type === 'gotty-launcher' ? 'Edit GoTTY launcher…' : 'Edit'}
                                                                             </button>
                                                                             <button
                                                                                 type="button"
