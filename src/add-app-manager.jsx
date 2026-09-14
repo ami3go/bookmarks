@@ -6,6 +6,7 @@ import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-co
 
 import {
     ADD_APP_TYPES,
+    APP_TYPE_AGENT_OF_EMPIRES,
     APP_TYPE_CUSTOM,
     addAppTypeLabel,
     createAddAppDraft,
@@ -17,8 +18,10 @@ import {
     validateApplicationDraft,
 } from './application-launcher.js';
 import {
+    AGENT_OF_EMPIRES_DEFAULT_PORT,
     APPLICATION_LAUNCHER_PORT_END,
     APPLICATION_LAUNCHER_PORT_START,
+    findAvailableAgentOfEmpiresPort,
     findAvailableApplicationLauncherPort,
 } from './application-launcher-ports.js';
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
@@ -65,9 +68,12 @@ export function AddAppManager({ isOpen = false, onClose, onSaved }) {
             const config = await readConfiguration();
             const services = config?.services || [];
             const terminal = isTerminalAddAppType(type);
+            const agentOfEmpires = type === APP_TYPE_AGENT_OF_EMPIRES;
             const port = terminal
                 ? await findAvailableGoTTYLauncherPort(window.cockpit, services)
-                : await findAvailableApplicationLauncherPort(window.cockpit, services);
+                : agentOfEmpires
+                    ? await findAvailableAgentOfEmpiresPort(window.cockpit, services)
+                    : await findAvailableApplicationLauncherPort(window.cockpit, services);
 
             if (sequence !== allocationSequence.current)
                 return;
@@ -75,7 +81,9 @@ export function AddAppManager({ isOpen = false, onClose, onSaved }) {
             if (!port) {
                 const range = terminal
                     ? `${GOTTY_LAUNCHER_PORT_START}-${GOTTY_LAUNCHER_PORT_END}`
-                    : `${APPLICATION_LAUNCHER_PORT_START}-${APPLICATION_LAUNCHER_PORT_END}`;
+                    : agentOfEmpires
+                        ? `${AGENT_OF_EMPIRES_DEFAULT_PORT} or ${APPLICATION_LAUNCHER_PORT_START}-${APPLICATION_LAUNCHER_PORT_END}`
+                        : `${APPLICATION_LAUNCHER_PORT_START}-${APPLICATION_LAUNCHER_PORT_END}`;
                 setNotice(`No free automatic port remains in ${range}. Free a port or edit an existing launcher to use a custom port.`);
                 return;
             }
@@ -188,7 +196,7 @@ export function AddAppManager({ isOpen = false, onClose, onSaved }) {
                             ))}
                         </select>
                         <div className="bookmark-field-help">
-                            Choosing a type loads the appropriate launcher fields, default values, and a free TCP port.
+                            Choosing a type loads its launcher fields and defaults. Agent of Empires prefers its native port {AGENT_OF_EMPIRES_DEFAULT_PORT}; other web apps use the managed application range.
                         </div>
                     </FormGroup>
 
