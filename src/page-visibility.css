@@ -24,22 +24,3 @@ body:has(#settings-show-title:not(:checked)) .bookmarks-heading h1 {
 body:has(#settings-show-search:not(:checked)) .bookmarks-search {
     display: none;
 }
-
-/*
- * When Search is hidden, do not leave the Group filter sitting in the wide
- * search column. The remaining row has four controls: Group, Add bookmark,
- * Add app, and Edit. Keep one explicit column for each so Edit cannot wrap.
- */
-.bookmarks-header-actions:not(:has(.bookmarks-search)),
-body:has(#settings-show-search:not(:checked)) .bookmarks-header-actions {
-    grid-template-columns: minmax(9rem, auto) auto auto auto;
-    justify-content: end;
-}
-
-@media (max-width: 720px) {
-    .bookmarks-header-actions:not(:has(.bookmarks-search)),
-    body:has(#settings-show-search:not(:checked)) .bookmarks-header-actions {
-        grid-template-columns: minmax(0, 1fr) auto auto;
-        justify-content: stretch;
-    }
-}
