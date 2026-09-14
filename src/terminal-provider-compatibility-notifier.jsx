@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
 
-import { watchConfiguration } from './cockpit-config.js';
+import { useConfiguration } from './app-providers.jsx';
 import {
     TERMINAL_LAUNCHER_TYPE,
     normalizeTerminalLauncher,
@@ -25,10 +25,8 @@ function configuredProviders(config) {
 }
 
 export function TerminalProviderCompatibilityNotifier() {
-    const [config, setConfig] = useState(null);
+    const { config } = useConfiguration();
     const [results, setResults] = useState([]);
-
-    useEffect(() => watchConfiguration(setConfig), []);
 
     const providers = useMemo(() => configuredProviders(config), [config]);
     const providerKey = useMemo(

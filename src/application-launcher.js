@@ -1,4 +1,17 @@
 import { newBookmarkId } from './bookmarks.js';
+import {
+    buildTransientUnitArguments,
+    cleanLauncherId,
+    cleanLauncherText,
+    formatArgumentLines,
+    parseArgumentLines,
+    readUserUnitJournal,
+    sleep,
+    stopUserUnit,
+    tcpPortListening,
+    tcpPortReady,
+    userUnitActive,
+} from './launcher-runtime.js';
 
 export const APPLICATION_LAUNCHER_TYPE = 'application-launcher';
 export const APPLICATION_LAUNCHER_EDIT_EVENT = 'cockpit-bookmarks:edit-application-launcher';
@@ -16,31 +29,16 @@ export const DEFAULT_APPLICATION_LAUNCHER = {
     urlPattern: 'https?://[^\\s]+',
 };
 
-const sleep = milliseconds => new Promise(resolve => globalThis.setTimeout(resolve, milliseconds));
-
-function cleanId(value) {
-    return String(value || '').trim().replace(/[^A-Za-z0-9-]/g, '-');
-}
-
-function cleanText(value) {
-    return String(value || '').replace(/[\0\r\n]/g, '').trim();
-}
-
 export function parseApplicationArguments(value) {
-    if (Array.isArray(value))
-        return value.map(cleanText).filter(Boolean);
-    return String(value || '')
-        .split(/\r?\n/)
-        .map(cleanText)
-        .filter(Boolean);
+    return parseArgumentLines(value);
 }
 
 export function formatApplicationArguments(value) {
-    return parseApplicationArguments(value).join('\n');
+    return formatArgumentLines(value);
 }
 
 export function applicationPath(id) {
-    return `${APPLICATION_LAUNCHER_PATH_PREFIX}${cleanId(id)}/`;
+    return `${APPLICATION_LAUNCHER_PATH_PREFIX}${cleanLauncherId(id)}/`;
 }
 
 export function applicationUrl(id, port) {
@@ -58,7 +56,7 @@ export function applicationIdFromUrl(value) {
 }
 
 export function applicationUnitName(id) {
-    return `cockpit-bookmarks-app-${cleanId(id)}.service`;
+    return `cockpit-bookmarks-app-${cleanLauncherId(id)}.service`;
 }
 
 export function normalizeApplicationLauncher(value = {}) {
@@ -66,15 +64,15 @@ export function normalizeApplicationLauncher(value = {}) {
     const autoStopMinutes = Number(value.autoStopMinutes);
     const startupTimeoutSeconds = Number(value.startupTimeoutSeconds);
     return {
-        command: cleanText(value.command),
+        command: cleanLauncherText(value.command),
         args: parseApplicationArguments(value.args),
-        bindHost: cleanText(value.bindHost) || DEFAULT_APPLICATION_LAUNCHER.bindHost,
+        bindHost: cleanLauncherText(value.bindHost) || DEFAULT_APPLICATION_LAUNCHER.bindHost,
         port: Number.isInteger(port) ? port : DEFAULT_APPLICATION_LAUNCHER.port,
         autoStopMinutes: Number.isFinite(autoStopMinutes) ? autoStopMinutes : DEFAULT_APPLICATION_LAUNCHER.autoStopMinutes,
         startupTimeoutSeconds: Number.isFinite(startupTimeoutSeconds) ? startupTimeoutSeconds : DEFAULT_APPLICATION_LAUNCHER.startupTimeoutSeconds,
-        urlCommand: cleanText(value.urlCommand),
+        urlCommand: cleanLauncherText(value.urlCommand),
         urlArgs: parseApplicationArguments(value.urlArgs),
-        urlPattern: cleanText(value.urlPattern) || DEFAULT_APPLICATION_LAUNCHER.urlPattern,
+        urlPattern: cleanLauncherText(value.urlPattern) || DEFAULT_APPLICATION_LAUNCHER.urlPattern,
     };
 }
 
@@ -120,11 +118,11 @@ export function validateApplicationDraft(draft) {
     const autoStopMinutes = Number(draft.autoStopMinutes);
     const startupTimeoutSeconds = Number(draft.startupTimeoutSeconds);
 
-    if (!cleanText(draft.name))
+    if (!cleanLauncherText(draft.name))
         errors.name = 'Name is required.';
-    if (!cleanText(draft.command))
+    if (!cleanLauncherText(draft.command))
         errors.command = 'Application command is required.';
-    if (!cleanText(draft.bindHost) || /[\s/]/.test(cleanText(draft.bindHost)))
+    if (!cleanLauncherText(draft.bindHost) || /[\s/]/.test(cleanLauncherText(draft.bindHost)))
         errors.bindHost = 'Use a bind address such as 0.0.0.0, 127.0.0.1, ::, or ::1.';
     if (!Number.isInteger(port) || port < 1024 || port > 65535)
         errors.port = 'Use an unprivileged TCP port from 1024 to 65535.';
@@ -133,7 +131,7 @@ export function validateApplicationDraft(draft) {
     if (!Number.isInteger(startupTimeoutSeconds) || startupTimeoutSeconds < 3 || startupTimeoutSeconds > 120)
         errors.startupTimeoutSeconds = 'Startup timeout must be between 3 and 120 seconds.';
     try {
-        new RegExp(cleanText(draft.urlPattern) || DEFAULT_APPLICATION_LAUNCHER.urlPattern, 'g');
+        new RegExp(cleanLauncherText(draft.urlPattern) || DEFAULT_APPLICATION_LAUNCHER.urlPattern, 'g');
     } catch (_) {
         errors.urlPattern = 'URL pattern must be a valid regular expression.';
     }
@@ -142,12 +140,12 @@ export function validateApplicationDraft(draft) {
 
 function tagsForApplication(original, command) {
     const tags = Array.isArray(original?.tags) ? original.tags : [];
-    const commandTag = cleanText(command).split('/').pop()?.toLowerCase() || '';
+    const commandTag = cleanLauncherText(command).split('/').pop()?.toLowerCase() || '';
     return [...new Set([...tags, 'application', 'launcher', 'web-app', ...(commandTag ? [commandTag] : [])])];
 }
 
 export function buildApplicationService(draft, original = null) {
-    const id = cleanId(original?.id || draft.id || newBookmarkId());
+    const id = cleanLauncherId(original?.id || draft.id || newBookmarkId());
     const launcher = normalizeApplicationLauncher({
         command: draft.command,
         args: draft.args,
@@ -164,12 +162,12 @@ export function buildApplicationService(draft, original = null) {
         id,
         type: APPLICATION_LAUNCHER_TYPE,
         integration: 'application',
-        name: cleanText(draft.name),
+        name: cleanLauncherText(draft.name),
         url: applicationUrl(id, launcher.port),
         description: `On-demand web application: ${launcher.command}`,
         group: 'Applications',
-        icon: cleanText(draft.icon) || '🚀',
-        accent: cleanText(draft.accent) || 'orange',
+        icon: cleanLauncherText(draft.icon) || '🚀',
+        accent: cleanLauncherText(draft.accent) || 'orange',
         tags: tagsForApplication(original, launcher.command),
         applicationLauncher: launcher,
     };
@@ -188,75 +186,18 @@ export function expandApplicationTemplate(value, hostname, launcher) {
 
 export function buildApplicationSystemdRunArguments(service, hostname = '') {
     const launcher = normalizeApplicationLauncher(service?.applicationLauncher);
-    const runtimeSeconds = Math.round(launcher.autoStopMinutes * 60);
     const command = expandApplicationTemplate(launcher.command, hostname, launcher);
     const args = launcher.args.map(arg => expandApplicationTemplate(arg, hostname, launcher));
-    return [
-        'systemd-run',
-        '--user',
-        `--unit=${applicationUnitName(service?.id)}`,
-        '--collect',
-        '--quiet',
-        '--service-type=exec',
-        `--property=RuntimeMaxSec=${runtimeSeconds}`,
-        '--property=KillMode=control-group',
-        `--description=Cockpit Bookmarks application: ${cleanText(service?.name) || command}`,
-        '--',
-        command,
-        ...args,
-    ];
-}
-
-function probeAddress(value) {
-    const address = cleanText(value).replace(/^\[|\]$/g, '');
-    if (!address || address === '0.0.0.0' || address === '::')
-        return '127.0.0.1';
-    return address;
-}
-
-async function tcpReady(cockpit, launcher) {
-    try {
-        await cockpit.spawn([
-            'timeout', '1', 'bash', '-c',
-            'exec 3<>/dev/tcp/"$1"/"$2"',
-            '_', probeAddress(launcher.bindHost), String(launcher.port),
-        ], { err: 'ignore' });
-        return true;
-    } catch (_) {
-        return false;
-    }
-}
-
-async function unitActive(cockpit, service) {
-    try {
-        await cockpit.spawn(['systemctl', '--user', 'is-active', '--quiet', applicationUnitName(service.id)], { err: 'ignore' });
-        return true;
-    } catch (_) {
-        return false;
-    }
-}
-
-async function portAlreadyListening(cockpit, port) {
-    try {
-        const output = await cockpit.spawn(['ss', '-H', '-ltn'], { err: 'ignore' });
-        return String(output || '').split(/\r?\n/).some(line => {
-            const endpoint = line.trim().split(/\s+/)[3] || '';
-            return endpoint.endsWith(`:${port}`);
-        });
-    } catch (_) {
-        return false;
-    }
+    return buildTransientUnitArguments({
+        unit: applicationUnitName(service?.id),
+        runtimeSeconds: launcher.autoStopMinutes * 60,
+        description: `Cockpit Bookmarks application: ${cleanLauncherText(service?.name) || command}`,
+        command: [command, ...args],
+    });
 }
 
 async function journalOutput(cockpit, service) {
-    try {
-        return await cockpit.spawn([
-            'journalctl', '--user', '-u', applicationUnitName(service.id),
-            '--no-pager', '-o', 'cat', '-n', '120',
-        ], { err: 'ignore' });
-    } catch (_) {
-        return '';
-    }
+    return readUserUnitJournal(cockpit, applicationUnitName(service.id), 120);
 }
 
 export function extractApplicationUrl(output, pattern = DEFAULT_APPLICATION_LAUNCHER.urlPattern) {
@@ -305,6 +246,7 @@ async function urlCommandOutput(cockpit, launcher, hostname) {
 export async function waitForApplicationUrl(cockpit, service, hostname = '') {
     const launcher = normalizeApplicationLauncher(service?.applicationLauncher);
     const attempts = Math.max(1, Math.ceil(launcher.startupTimeoutSeconds * 2));
+    const unit = applicationUnitName(service.id);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         const commandOutput = await urlCommandOutput(cockpit, launcher, hostname);
         const logOutput = commandOutput || await journalOutput(cockpit, service);
@@ -312,7 +254,7 @@ export async function waitForApplicationUrl(cockpit, service, hostname = '') {
         if (url)
             return rewriteApplicationUrl(url, hostname);
 
-        if (attempt > 1 && !await unitActive(cockpit, service))
+        if (attempt > 1 && !await userUnitActive(cockpit, unit))
             break;
         if (attempt + 1 < attempts)
             await sleep(500);
@@ -321,13 +263,7 @@ export async function waitForApplicationUrl(cockpit, service, hostname = '') {
 }
 
 export async function stopApplicationLauncher(cockpit, service) {
-    try {
-        await cockpit.spawn(['systemctl', '--user', 'stop', applicationUnitName(service.id)], { err: 'message' });
-    } catch (error) {
-        const text = cockpit?.message ? cockpit.message(error) : String(error || '');
-        if (!/(not loaded|not found|inactive)/i.test(text))
-            throw error;
-    }
+    return stopUserUnit(cockpit, applicationUnitName(service.id));
 }
 
 export async function startApplicationLauncher(cockpit, service, hostname = '') {
@@ -349,16 +285,17 @@ export async function startApplicationLauncher(cockpit, service, hostname = '') 
     if (Object.keys(validation).length)
         throw new Error(Object.values(validation)[0]);
 
-    if (await unitActive(cockpit, service)) {
+    const unit = applicationUnitName(service.id);
+    if (await userUnitActive(cockpit, unit)) {
         const existingUrl = await waitForApplicationUrl(cockpit, service, hostname);
         if (existingUrl)
             return { reused: true, url: existingUrl };
-        if (await tcpReady(cockpit, launcher))
+        if (await tcpPortReady(cockpit, launcher.bindHost, launcher.port))
             throw new Error('Application is running but its browser URL could not be recovered. Check the URL command/pattern.');
         await stopApplicationLauncher(cockpit, service);
     }
 
-    if (await portAlreadyListening(cockpit, launcher.port))
+    if (await tcpPortListening(cockpit, launcher.port))
         throw new Error(`TCP port ${launcher.port} is already in use by another service.`);
 
     await cockpit.spawn(buildApplicationSystemdRunArguments(service, hostname), { err: 'message' });
@@ -369,58 +306,4 @@ export async function startApplicationLauncher(cockpit, service, hostname = '') 
         throw new Error(`Application did not publish a usable browser URL${logs ? `: ${logs}` : '.'}`);
     }
     return { reused: false, url };
-}
-
-function writeTabMessage(tab, title, message) {
-    if (!tab || tab.closed)
-        return;
-    try {
-        tab.document.title = title;
-        tab.document.body.replaceChildren();
-        tab.document.body.style.fontFamily = 'system-ui, sans-serif';
-        tab.document.body.style.padding = '2rem';
-        const heading = tab.document.createElement('h2');
-        heading.textContent = title;
-        const paragraph = tab.document.createElement('p');
-        paragraph.textContent = message;
-        tab.document.body.append(heading, paragraph);
-    } catch (_) {
-        // The tab may already have navigated away.
-    }
-}
-
-export function installApplicationLauncherOpenInterceptor(cockpit = window.cockpit) {
-    if (window.__cockpitBookmarksApplicationLauncherInstalled)
-        return;
-    window.__cockpitBookmarksApplicationLauncherInstalled = true;
-
-    const nativeOpen = window.open.bind(window);
-    window.open = function interceptedApplicationOpen(url, target, features) {
-        const launcherId = applicationIdFromUrl(url);
-        if (!launcherId)
-            return nativeOpen(url, target, features);
-
-        const tab = nativeOpen('about:blank', '_blank');
-        if (!tab)
-            return null;
-        try { tab.opener = null; } catch (_) { /* best effort */ }
-        writeTabMessage(tab, 'Starting application…', 'Starting the configured application on the Cockpit host and waiting for its browser URL.');
-
-        import('./cockpit-config.js').then(({ readConfiguration }) => readConfiguration())
-            .then(config => {
-                const service = config.services.find(item => item?.id === launcherId && item?.type === APPLICATION_LAUNCHER_TYPE);
-                if (!service)
-                    throw new Error('The application launcher bookmark no longer exists.');
-                return startApplicationLauncher(cockpit, service, window.location.hostname);
-            })
-            .then(result => {
-                if (!tab.closed)
-                    tab.location.replace(result.url);
-            })
-            .catch(error => {
-                const message = cockpit?.message ? cockpit.message(error) : String(error?.message || error || 'Unknown error');
-                writeTabMessage(tab, 'Could not start application', message);
-            });
-        return tab;
-    };
 }

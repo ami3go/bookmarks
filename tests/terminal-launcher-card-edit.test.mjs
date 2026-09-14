@@ -3,11 +3,18 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const app = fs.readFileSync(new URL('../src/app.jsx', import.meta.url), 'utf8');
-const manager = fs.readFileSync(new URL('../src/terminal-launcher-manager.jsx', import.meta.url), 'utf8');
+const index = fs.readFileSync(new URL('../src/index.jsx', import.meta.url), 'utf8');
 
-test('terminal launcher card Edit dispatches and handles the same edit event', () => {
-    assert.match(app, /new CustomEvent\(TERMINAL_LAUNCHER_EDIT_EVENT/);
-    assert.match(manager, /addEventListener\(TERMINAL_LAUNCHER_EDIT_EVENT, handleEditRequest\)/);
-    assert.match(manager, /setDraft\(launcherDraft\(service\)\)/);
-    assert.match(manager, /setEditingId\(service.id\)/);
+test('launcher card editing is composed directly without DOM interception or custom edit events', () => {
+    assert.match(app, /<LauncherEditorDialog/);
+    assert.match(app, /function launcherEditorType\(service\)/);
+    assert.match(app, /service\?\.type === TERMINAL_LAUNCHER_TYPE/);
+    assert.match(app, /service\?\.type === APPLICATION_LAUNCHER_TYPE/);
+    assert.match(app, /const launcherType = launcherEditorType\(storedService\)/);
+    assert.match(app, /setLauncherEditorService\(storedService\)/);
+    assert.doesNotMatch(app, /dispatchEvent\(new CustomEvent\(TERMINAL_LAUNCHER_EDIT_EVENT/);
+    assert.doesNotMatch(index, /<TerminalCardEditor/);
+    assert.doesNotMatch(index, /<ApplicationCardEditor/);
+    assert.doesNotMatch(index, /installTerminalLauncherOpenInterceptor/);
+    assert.doesNotMatch(index, /installApplicationLauncherOpenInterceptor/);
 });

@@ -4,6 +4,9 @@ import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.
 import { Page } from '@patternfly/react-core/dist/esm/components/Page/index.js';
 import { SearchInput } from '@patternfly/react-core/dist/esm/components/SearchInput/index.js';
 
+import { AddAppManager } from './add-app-manager.jsx';
+import { useAdminPermission, useConfiguration } from './app-providers.jsx';
+import { APPLICATION_LAUNCHER_TYPE } from './application-launcher.js';
 import {
     CONFIG_PATH,
     CONFIG_SYNTAX,
@@ -37,10 +40,13 @@ import {
     serviceSelectionKey,
     typingTarget,
 } from './bookmark-ui.js';
-import { modifyConfiguration, watchConfiguration } from './cockpit-config.js';
+import { modifyConfiguration } from './cockpit-config.js';
+import { LauncherEditorDialog } from './launcher-editor-dialog.jsx';
 import { ManagementDialogs } from './management-dialogs.jsx';
 import { ServiceDiscovery } from './service-discovery.jsx';
-import { TERMINAL_LAUNCHER_EDIT_EVENT, TERMINAL_LAUNCHER_TYPE } from './terminal-launcher.js';
+import { isLauncherService, openService as openConfiguredService, stopService } from './service-runtime.js';
+import { TERMINAL_LAUNCHER_TYPE } from './terminal-launcher.js';
+import { TerminalLauncherManager } from './terminal-launcher-manager.jsx';
 
 function PencilIcon() {
     return (
@@ -50,15 +56,25 @@ function PencilIcon() {
     );
 }
 
+function launcherEditorType(service) {
+    if (service?.type === TERMINAL_LAUNCHER_TYPE)
+        return 'terminal';
+    if (service?.type === APPLICATION_LAUNCHER_TYPE)
+        return 'application';
+    return null;
+}
+
 export const Application = () => {
-    const [config, setConfig] = useState(DEFAULT_CONFIG);
+    const { config, configError, configMissing } = useConfiguration();
+    const canEdit = useAdminPermission();
     const [query, setQuery] = useState('');
     const [groupFilter, setGroupFilter] = useState('all');
     const [notice, setNotice] = useState(null);
-    const [canEdit, setCanEdit] = useState(null);
     const [editMode, setEditMode] = useState(false);
     const [selectedBookmark, setSelectedBookmark] = useState(null);
     const [editor, setEditor] = useState(null);
+    const [launcherEditorService, setLauncherEditorService] = useState(null);
+    const [addAppOpen, setAddAppOpen] = useState(false);
     const [draft, setDraft] = useState(EMPTY_BOOKMARK);
     const [formErrors, setFormErrors] = useState({});
     const [writeErrors, setWriteErrors] = useState({});
@@ -81,40 +97,38 @@ export const Application = () => {
     const [importCandidate, setImportCandidate] = useState(null);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [discoveryOpen, setDiscoveryOpen] = useState(false);
+    const [terminalManagerOpen, setTerminalManagerOpen] = useState(false);
     const [dragSource, setDragSource] = useState(null);
     const [collapsedGroups, setCollapsedGroups] = useState(loadCollapsedGroups);
     const fileInputRef = useRef(null);
 
     const hostname = window.location.hostname;
 
-    useEffect(() => watchConfiguration(
-        setConfig,
-        error => setNotice({
-            variant: 'danger',
-            text: `Could not monitor ${CONFIG_PATH}: ${window.cockpit.message(error)}`,
-        }),
-        () => setNotice({
-            variant: 'info',
-            text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
-        })
-    ), []);
+    useEffect(() => {
+        if (configError) {
+            setNotice({
+                variant: 'danger',
+                text: `Could not monitor ${CONFIG_PATH}: ${window.cockpit.message(configError)}`,
+            });
+        }
+    }, [configError]);
 
     useEffect(() => {
-        const permission = window.cockpit.permission({ admin: true });
-        const updatePermission = () => {
-            setCanEdit(permission.allowed);
-            if (!permission.allowed)
-                setEditMode(false);
-        };
+        if (configMissing) {
+            setNotice({
+                variant: 'info',
+                text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
+            });
+        }
+    }, [configMissing]);
 
-        updatePermission();
-        permission.addEventListener('changed', updatePermission);
-
-        return () => {
-            permission.removeEventListener('changed', updatePermission);
-            permission.close();
-        };
-    }, []);
+    useEffect(() => {
+        if (canEdit === false) {
+            setEditMode(false);
+            setAddAppOpen(false);
+            setLauncherEditorService(null);
+        }
+    }, [canEdit]);
 
     useEffect(() => {
         if (!editMode) {
@@ -124,7 +138,7 @@ export const Application = () => {
     }, [editMode]);
 
     useEffect(() => {
-        if (!editMode || editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen)
+        if (!editMode || editor || launcherEditorService || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen || terminalManagerOpen || addAppOpen)
             return undefined;
 
         let timer;
@@ -142,7 +156,7 @@ export const Application = () => {
             window.removeEventListener('pointerdown', resetTimer);
             window.removeEventListener('keydown', resetTimer);
         };
-    }, [editMode, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen]);
+    }, [editMode, editor, launcherEditorService, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen, terminalManagerOpen, addAppOpen]);
 
     useEffect(() => {
         try {
@@ -158,7 +172,7 @@ export const Application = () => {
     }, [config.showSearch, query]);
 
     useEffect(() => {
-        const managementOpen = Boolean(editor || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen);
+        const managementOpen = Boolean(editor || launcherEditorService || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen || terminalManagerOpen || addAppOpen);
         const handleKeyboard = event => {
             if (managementOpen)
                 return;
@@ -205,7 +219,7 @@ export const Application = () => {
 
         document.addEventListener('keydown', handleKeyboard);
         return () => document.removeEventListener('keydown', handleKeyboard);
-    }, [query, config.showSearch, editor, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen]);
+    }, [query, config.showSearch, editor, launcherEditorService, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen, terminalManagerOpen, addAppOpen]);
 
     const groups = useMemo(
         () => normalizeGroupOrder(config.services, config.groupOrder),
@@ -320,9 +334,8 @@ export const Application = () => {
         setNotice(null);
 
         modifyConfiguration(transform, action)
-            .then(newConfig => {
+            .then(() => {
                 setSaving(false);
-                setConfig(newConfig);
                 setNotice({ variant: 'success', text: successText });
                 onSuccess?.();
             })
@@ -351,18 +364,20 @@ export const Application = () => {
         clearWriteError('editor');
         setSelectedBookmark(serviceSelectionKey(service));
         const storedService = runtimeFreeService(service);
+        const launcherType = launcherEditorType(storedService);
 
-        if (storedService.type === TERMINAL_LAUNCHER_TYPE) {
+        if (launcherType) {
             if (!storedService.id) {
-                setNotice({ variant: 'danger', text: 'This terminal launcher has no stable ID and cannot be edited safely.' });
+                setNotice({ variant: 'danger', text: `This ${launcherType} launcher has no stable ID and cannot be edited safely.` });
                 return;
             }
             setEditor(null);
             setFormErrors({});
-            window.dispatchEvent(new CustomEvent(TERMINAL_LAUNCHER_EDIT_EVENT, { detail: { id: storedService.id } }));
+            setLauncherEditorService(storedService);
             return;
         }
 
+        setLauncherEditorService(null);
         setDraft(editableBookmark(storedService));
         setFormErrors({});
         setEditor({
@@ -425,20 +440,37 @@ export const Application = () => {
         setDeleteTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
     };
 
-    const deleteBookmark = () => {
-        modifyConfig(current => {
-            const index = findBookmarkIndex(current.services, deleteTarget);
-            if (index === -1)
-                throw new Error('This bookmark was changed or removed. Reload the page and try again.');
+    const deleteBookmark = async () => {
+        if (!deleteTarget)
+            return;
 
-            return {
-                ...current,
-                services: current.services.filter((_, serviceIndex) => serviceIndex !== index),
-            };
-        }, 'Bookmark deleted.', () => {
+        clearWriteError('delete');
+        setSaving(true);
+        setNotice(null);
+        try {
+            if (isLauncherService(deleteTarget.service))
+                await stopService(deleteTarget.service);
+
+            await modifyConfiguration(current => {
+                const index = findBookmarkIndex(current.services, deleteTarget);
+                if (index === -1)
+                    throw new Error('This bookmark was changed or removed. Reload the page and try again.');
+                return {
+                    ...current,
+                    services: current.services.filter((_, serviceIndex) => serviceIndex !== index),
+                };
+            }, `Deleted ${deleteTarget.service?.name || 'bookmark'}`);
+
+            setNotice({ variant: 'success', text: 'Bookmark deleted.' });
             setDeleteTarget(null);
             setSelectedBookmark(null);
-        }, `Deleted ${deleteTarget?.service?.name || 'bookmark'}`, 'delete');
+        } catch (error) {
+            const text = `Could not update ${CONFIG_PATH}: ${window.cockpit.message(error)}`;
+            setNotice({ variant: 'danger', text });
+            setWriteErrors(current => ({ ...current, delete: text }));
+        } finally {
+            setSaving(false);
+        }
     };
 
     const openMoveToGroup = service => {
@@ -488,6 +520,10 @@ export const Application = () => {
     const duplicateService = service => {
         if (!editMode || canEdit !== true)
             return;
+        if (isLauncherService(service)) {
+            setNotice({ variant: 'info', text: 'Use Add app to create another launcher so a new port and launcher URL can be allocated safely.' });
+            return;
+        }
 
         const target = { index: service.sourceIndex, service: runtimeFreeService(service) };
         modifyConfig(current => {
@@ -502,10 +538,7 @@ export const Application = () => {
     };
 
     const openService = service => {
-        if (service.openMode === 'same-tab')
-            window.open(service.resolvedUrl, '_top');
-        else
-            window.open(service.resolvedUrl, '_blank', 'noopener,noreferrer');
+        openConfiguredService(service);
     };
 
     const selectService = service => {
@@ -719,6 +752,9 @@ export const Application = () => {
                         <Button variant="primary" onClick={openAdd} isDisabled={canEdit !== true}>
                             Add bookmark
                         </Button>
+                        <Button variant="secondary" onClick={() => setAddAppOpen(true)} isDisabled={canEdit !== true}>
+                            Add app
+                        </Button>
                         <Button
                             variant={editMode ? 'secondary' : 'plain'}
                             className="bookmark-edit-mode-toggle"
@@ -746,6 +782,8 @@ export const Application = () => {
                             <span> Click a card to select it, or drag a card to reorder. Edit mode locks automatically after 2 minutes of inactivity.</span>
                         </div>
                         <div className="bookmarks-management-actions">
+                            <TerminalLauncherManager inline onOpenChange={setTerminalManagerOpen} />
+                            <ServiceDiscovery visible inline onOpenChange={setDiscoveryOpen} />
                             <Button variant="secondary" onClick={openSettings}>Page settings</Button>
                             <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Import JSON</Button>
                             <Button variant="secondary" onClick={exportConfig}>Export JSON</Button>
@@ -855,9 +893,19 @@ export const Application = () => {
                 restoreHistory={restoreHistory}
             />
 
-            <ServiceDiscovery
-                visible={editMode && canEdit === true}
-                onOpenChange={setDiscoveryOpen}
+            <AddAppManager
+                isOpen={addAppOpen}
+                onClose={() => setAddAppOpen(false)}
+                onSaved={service => setNotice({ variant: 'success', text: `${service.name} added.` })}
+            />
+
+            <LauncherEditorDialog
+                service={launcherEditorService}
+                onClose={() => setLauncherEditorService(null)}
+                onSaved={service => {
+                    setSelectedBookmark(null);
+                    setNotice({ variant: 'success', text: `${service.name} updated.` });
+                }}
             />
         </Page>
     );

@@ -1,14 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 import { Form, FormGroup } from '@patternfly/react-core/dist/esm/components/Form/index.js';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal/index.js';
-import { TextArea } from '@patternfly/react-core/dist/esm/components/TextArea/index.js';
-import { TextInput } from '@patternfly/react-core/dist/esm/components/TextInput/index.js';
 
 import {
-    ADD_APP_EVENT,
     ADD_APP_TYPES,
+    APP_TYPE_AGENT_OF_EMPIRES,
     APP_TYPE_CUSTOM,
     addAppTypeLabel,
     createAddAppDraft,
@@ -20,8 +18,10 @@ import {
     validateApplicationDraft,
 } from './application-launcher.js';
 import {
+    AGENT_OF_EMPIRES_DEFAULT_PORT,
     APPLICATION_LAUNCHER_PORT_END,
     APPLICATION_LAUNCHER_PORT_START,
+    findAvailableAgentOfEmpiresPort,
     findAvailableApplicationLauncherPort,
 } from './application-launcher-ports.js';
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
@@ -30,11 +30,11 @@ import {
     GOTTY_LAUNCHER_PORT_START,
     findAvailableGoTTYLauncherPort,
 } from './gotty-launcher-ports.js';
+import { ApplicationLauncherFields, TerminalLauncherFields } from './launcher-form-fields.jsx';
 import {
     buildLauncherService,
     defaultBinaryForProvider,
-    isNetworkExposedAddress,
-    terminalProviderLabel,
+    normalizeTerminalProvider,
     validateLauncherDraft,
 } from './terminal-launcher.js';
 
@@ -46,14 +46,7 @@ function messageFor(error) {
     }
 }
 
-function isApplicationNetworkFacing(draft) {
-    const value = String(draft?.bindHost || '').trim().toLowerCase();
-    return Boolean(draft) && !['127.0.0.1', 'localhost', '::1'].includes(value) && !value.startsWith('127.');
-}
-
-export function AddAppManager() {
-    const [allowed, setAllowed] = useState(false);
-    const [open, setOpen] = useState(false);
+export function AddAppManager({ isOpen = false, onClose, onSaved }) {
     const [appType, setAppType] = useState(APP_TYPE_CUSTOM);
     const [draft, setDraft] = useState(null);
     const [errors, setErrors] = useState({});
@@ -61,17 +54,6 @@ export function AddAppManager() {
     const [saving, setSaving] = useState(false);
     const [allocatingPort, setAllocatingPort] = useState(false);
     const allocationSequence = useRef(0);
-
-    useEffect(() => {
-        const permission = window.cockpit.permission({ admin: true });
-        const update = () => setAllowed(permission.allowed === true);
-        update();
-        permission.addEventListener('changed', update);
-        return () => {
-            permission.removeEventListener('changed', update);
-            permission.close();
-        };
-    }, []);
 
     const prepareType = useCallback(async value => {
         const type = normalizeAddAppType(value);
@@ -86,9 +68,12 @@ export function AddAppManager() {
             const config = await readConfiguration();
             const services = config?.services || [];
             const terminal = isTerminalAddAppType(type);
+            const agentOfEmpires = type === APP_TYPE_AGENT_OF_EMPIRES;
             const port = terminal
                 ? await findAvailableGoTTYLauncherPort(window.cockpit, services)
-                : await findAvailableApplicationLauncherPort(window.cockpit, services);
+                : agentOfEmpires
+                    ? await findAvailableAgentOfEmpiresPort(window.cockpit, services)
+                    : await findAvailableApplicationLauncherPort(window.cockpit, services);
 
             if (sequence !== allocationSequence.current)
                 return;
@@ -96,7 +81,9 @@ export function AddAppManager() {
             if (!port) {
                 const range = terminal
                     ? `${GOTTY_LAUNCHER_PORT_START}-${GOTTY_LAUNCHER_PORT_END}`
-                    : `${APPLICATION_LAUNCHER_PORT_START}-${APPLICATION_LAUNCHER_PORT_END}`;
+                    : agentOfEmpires
+                        ? `${AGENT_OF_EMPIRES_DEFAULT_PORT} or ${APPLICATION_LAUNCHER_PORT_START}-${APPLICATION_LAUNCHER_PORT_END}`
+                        : `${APPLICATION_LAUNCHER_PORT_START}-${APPLICATION_LAUNCHER_PORT_END}`;
                 setNotice(`No free automatic port remains in ${range}. Free a port or edit an existing launcher to use a custom port.`);
                 return;
             }
@@ -112,26 +99,16 @@ export function AddAppManager() {
     }, []);
 
     useEffect(() => {
-        const handleAddApp = () => {
-            if (!allowed)
-                return;
-            setOpen(true);
-            prepareType(APP_TYPE_CUSTOM);
-        };
-        window.addEventListener(ADD_APP_EVENT, handleAddApp);
-        return () => window.removeEventListener(ADD_APP_EVENT, handleAddApp);
-    }, [allowed, prepareType]);
-
-    const close = () => {
-        if (saving)
+        if (!isOpen) {
+            allocationSequence.current += 1;
+            setDraft(null);
+            setErrors({});
+            setNotice('');
+            setAllocatingPort(false);
             return;
-        allocationSequence.current += 1;
-        setAllocatingPort(false);
-        setOpen(false);
-        setDraft(null);
-        setErrors({});
-        setNotice('');
-    };
+        }
+        prepareType(APP_TYPE_CUSTOM);
+    }, [isOpen, prepareType]);
 
     const update = (field, value) => {
         setDraft(current => ({ ...current, [field]: value }));
@@ -139,18 +116,34 @@ export function AddAppManager() {
         setNotice('');
     };
 
-    const terminal = isTerminalAddAppType(appType);
-    const providerLabel = terminalProviderLabel(draft?.provider);
-    const networkFacing = useMemo(
-        () => terminal ? Boolean(draft && isNetworkExposedAddress(draft.address)) : isApplicationNetworkFacing(draft),
-        [terminal, draft]
-    );
+    const updateProvider = providerValue => {
+        const provider = normalizeTerminalProvider(providerValue);
+        setDraft(current => {
+            const oldProvider = normalizeTerminalProvider(current.provider);
+            const oldDefault = defaultBinaryForProvider(oldProvider);
+            return {
+                ...current,
+                provider,
+                binary: !current.binary || current.binary === oldDefault
+                    ? defaultBinaryForProvider(provider)
+                    : current.binary,
+            };
+        });
+        setErrors(current => ({ ...current, provider: undefined, binary: undefined }));
+        setNotice('');
+    };
+
+    const close = () => {
+        if (!saving)
+            onClose?.();
+    };
 
     const save = async event => {
         event.preventDefault();
         if (!draft || allocatingPort)
             return;
 
+        const terminal = isTerminalAddAppType(appType);
         const validation = terminal ? validateLauncherDraft(draft) : validateApplicationDraft(draft);
         setErrors(validation);
         if (Object.keys(validation).length)
@@ -166,7 +159,8 @@ export function AddAppManager() {
                 ...current,
                 services: [...current.services, service],
             }), `Added ${addAppTypeLabel(appType)} application ${draft.name}`);
-            close();
+            onSaved?.(service);
+            onClose?.();
         } catch (error) {
             setNotice(`Could not add application: ${messageFor(error)}`);
         } finally {
@@ -174,11 +168,10 @@ export function AddAppManager() {
         }
     };
 
-    if (!allowed)
-        return null;
+    const terminal = isTerminalAddAppType(appType);
 
     return (
-        <Modal isOpen={open} onClose={close} variant="medium">
+        <Modal isOpen={isOpen} onClose={close} variant="medium">
             <ModalHeader title="Add app" />
             <ModalBody>
                 {notice && (
@@ -203,147 +196,30 @@ export function AddAppManager() {
                             ))}
                         </select>
                         <div className="bookmark-field-help">
-                            Choosing a type replaces the creation fields with that launcher's defaults and automatically selects a free TCP port.
+                            Choosing a type loads its launcher fields and defaults. Agent of Empires prefers its native port {AGENT_OF_EMPIRES_DEFAULT_PORT}; other web apps use the managed application range.
                         </div>
                     </FormGroup>
 
-                    {allocatingPort && (
-                        <div className="bookmark-field-help">Choosing a free port and loading defaults…</div>
-                    )}
+                    {allocatingPort && <div className="bookmark-field-help">Choosing a free port and loading defaults…</div>}
 
                     {draft && terminal && (
-                        <>
-                            <FormGroup label="Application name" isRequired fieldId="add-app-name">
-                                <TextInput id="add-app-name" value={draft.name} onChange={(_event, value) => update('name', value)} validated={errors.name ? 'error' : 'default'} />
-                                {errors.name && <div className="bookmark-field-error">{errors.name}</div>}
-                            </FormGroup>
-
-                            <FormGroup label="Application command" isRequired fieldId="add-app-command">
-                                <TextInput id="add-app-command" value={draft.command} onChange={(_event, value) => update('command', value)} placeholder="bash" validated={errors.command ? 'error' : 'default'} />
-                                {errors.command && <div className="bookmark-field-error">{errors.command}</div>}
-                                <div className="bookmark-field-help">The command runs inside the selected web terminal. Examples: <code>bash</code>, <code>mc</code>, <code>btop</code>, or <code>fish</code>.</div>
-                            </FormGroup>
-
-                            <FormGroup label="Arguments" fieldId="add-app-args">
-                                <TextArea id="add-app-args" value={draft.args} onChange={(_event, value) => update('args', value)} resizeOrientation="vertical" placeholder={'--some-option\n/path/with spaces'} />
-                                <div className="bookmark-field-help">Optional. One argument per line; arguments are passed directly without shell interpolation.</div>
-                            </FormGroup>
-
-                            <div className="gotty-launcher-grid">
-                                <FormGroup label="TCP port" isRequired fieldId="add-app-port">
-                                    <TextInput id="add-app-port" type="number" value={draft.port} onChange={(_event, value) => update('port', value)} validated={errors.port ? 'error' : 'default'} />
-                                    {errors.port && <div className="bookmark-field-error">{errors.port}</div>}
-                                </FormGroup>
-                                <FormGroup label="Auto-stop minutes" isRequired fieldId="add-app-auto-stop">
-                                    <TextInput id="add-app-auto-stop" type="number" value={draft.autoStopMinutes} onChange={(_event, value) => update('autoStopMinutes', value)} validated={errors.autoStopMinutes ? 'error' : 'default'} />
-                                    {errors.autoStopMinutes && <div className="bookmark-field-error">{errors.autoStopMinutes}</div>}
-                                </FormGroup>
-                            </div>
-
-                            <FormGroup label="Listen address" isRequired fieldId="add-app-address">
-                                <TextInput id="add-app-address" value={draft.address} onChange={(_event, value) => update('address', value)} placeholder="{host}" validated={errors.address ? 'error' : 'default'} />
-                                {errors.address && <div className="bookmark-field-error">{errors.address}</div>}
-                                <div className="bookmark-field-help">Default <code>{'{host}'}</code> expands to the Cockpit hostname/IP. Use <code>127.0.0.1</code> for local-only binding.</div>
-                            </FormGroup>
-
-                            {networkFacing && (
-                                <Alert isInline variant="warning" title="Writable terminal will be network-facing">
-                                    {providerLabel} starts with interactive input enabled. Only expose it on a trusted LAN/VPN or behind appropriate network controls.
-                                </Alert>
-                            )}
-
-                            <FormGroup label={`${providerLabel} executable`} isRequired fieldId="add-app-binary">
-                                <TextInput id="add-app-binary" value={draft.binary} onChange={(_event, value) => update('binary', value)} placeholder={defaultBinaryForProvider(draft.provider)} validated={errors.binary ? 'error' : 'default'} />
-                                {errors.binary && <div className="bookmark-field-error">{errors.binary}</div>}
-                            </FormGroup>
-
-                            <div className="gotty-launcher-grid">
-                                <FormGroup label="Icon" fieldId="add-app-icon">
-                                    <TextInput id="add-app-icon" value={draft.icon} onChange={(_event, value) => update('icon', value)} placeholder="⌨️" />
-                                </FormGroup>
-                                <FormGroup label="Card accent" fieldId="add-app-accent">
-                                    <select id="add-app-accent" className="bookmark-select" value={draft.accent} onChange={event => update('accent', event.target.value)}>
-                                        <option value="teal">Teal</option><option value="blue">Blue</option><option value="green">Green</option>
-                                        <option value="purple">Purple</option><option value="orange">Orange</option><option value="red">Red</option><option value="none">Default</option>
-                                    </select>
-                                </FormGroup>
-                            </div>
-                        </>
+                        <TerminalLauncherFields
+                            draft={draft}
+                            errors={errors}
+                            onChange={update}
+                            onProviderChange={updateProvider}
+                            idPrefix="add-app-terminal"
+                            showGroup={false}
+                        />
                     )}
 
                     {draft && !terminal && (
-                        <>
-                            <FormGroup label="Application name" isRequired fieldId="add-app-name">
-                                <TextInput id="add-app-name" value={draft.name} onChange={(_event, value) => update('name', value)} validated={errors.name ? 'error' : 'default'} />
-                                {errors.name && <div className="bookmark-field-error">{errors.name}</div>}
-                            </FormGroup>
-
-                            <FormGroup label="Command" isRequired fieldId="add-app-command">
-                                <TextInput id="add-app-command" value={draft.command} onChange={(_event, value) => update('command', value)} placeholder="/usr/local/bin/my-app" validated={errors.command ? 'error' : 'default'} />
-                                {errors.command && <div className="bookmark-field-error">{errors.command}</div>}
-                                <div className="bookmark-field-help">Absolute paths are recommended for systemd user services.</div>
-                            </FormGroup>
-
-                            <FormGroup label="Arguments" fieldId="add-app-args">
-                                <TextArea id="add-app-args" value={draft.args} onChange={(_event, value) => update('args', value)} resizeOrientation="vertical" placeholder={'--host\n{bind}\n--port\n{port}'} />
-                                <div className="bookmark-field-help">One argv entry per line. Placeholders: <code>{'{host}'}</code> Cockpit hostname/IP, <code>{'{bind}'}</code> bind address, <code>{'{port}'}</code> configured port.</div>
-                            </FormGroup>
-
-                            <div className="gotty-launcher-grid">
-                                <FormGroup label="Bind host" isRequired fieldId="add-app-bind-host">
-                                    <TextInput id="add-app-bind-host" value={draft.bindHost} onChange={(_event, value) => update('bindHost', value)} placeholder="0.0.0.0" validated={errors.bindHost ? 'error' : 'default'} />
-                                    {errors.bindHost && <div className="bookmark-field-error">{errors.bindHost}</div>}
-                                </FormGroup>
-                                <FormGroup label="TCP port" isRequired fieldId="add-app-port">
-                                    <TextInput id="add-app-port" type="number" value={draft.port} onChange={(_event, value) => update('port', value)} validated={errors.port ? 'error' : 'default'} />
-                                    {errors.port && <div className="bookmark-field-error">{errors.port}</div>}
-                                </FormGroup>
-                            </div>
-
-                            {networkFacing && (
-                                <Alert isInline variant="warning" title="Application will be network-facing">
-                                    A wildcard/LAN bind exposes the application's HTTP server. Use authentication and a trusted LAN/VPN or reverse proxy as appropriate.
-                                </Alert>
-                            )}
-
-                            <div className="gotty-launcher-grid">
-                                <FormGroup label="Auto-stop minutes" isRequired fieldId="add-app-auto-stop">
-                                    <TextInput id="add-app-auto-stop" type="number" value={draft.autoStopMinutes} onChange={(_event, value) => update('autoStopMinutes', value)} validated={errors.autoStopMinutes ? 'error' : 'default'} />
-                                    {errors.autoStopMinutes && <div className="bookmark-field-error">{errors.autoStopMinutes}</div>}
-                                </FormGroup>
-                                <FormGroup label="Startup timeout seconds" isRequired fieldId="add-app-startup-timeout">
-                                    <TextInput id="add-app-startup-timeout" type="number" value={draft.startupTimeoutSeconds} onChange={(_event, value) => update('startupTimeoutSeconds', value)} validated={errors.startupTimeoutSeconds ? 'error' : 'default'} />
-                                    {errors.startupTimeoutSeconds && <div className="bookmark-field-error">{errors.startupTimeoutSeconds}</div>}
-                                </FormGroup>
-                            </div>
-
-                            <FormGroup label="Live URL command" fieldId="add-app-url-command">
-                                <TextInput id="add-app-url-command" value={draft.urlCommand} onChange={(_event, value) => update('urlCommand', value)} placeholder="optional command" />
-                                <div className="bookmark-field-help">Optional command used to recover a live browser URL when the application is already running.</div>
-                            </FormGroup>
-
-                            <FormGroup label="Live URL command arguments" fieldId="add-app-url-args">
-                                <TextArea id="add-app-url-args" value={draft.urlArgs} onChange={(_event, value) => update('urlArgs', value)} resizeOrientation="vertical" placeholder="one argument per line" />
-                            </FormGroup>
-
-                            <FormGroup label="URL detection pattern" isRequired fieldId="add-app-url-pattern">
-                                <TextInput id="add-app-url-pattern" value={draft.urlPattern} onChange={(_event, value) => update('urlPattern', value)} validated={errors.urlPattern ? 'error' : 'default'} />
-                                {errors.urlPattern && <div className="bookmark-field-error">{errors.urlPattern}</div>}
-                                <div className="bookmark-field-help">Regular expression applied to application output. The first capture group is used when present; otherwise the complete match is used.</div>
-                            </FormGroup>
-
-                            <div className="gotty-launcher-grid">
-                                <FormGroup label="Icon" fieldId="add-app-icon">
-                                    <TextInput id="add-app-icon" value={draft.icon} onChange={(_event, value) => update('icon', value)} placeholder="🚀" />
-                                </FormGroup>
-                                <FormGroup label="Card accent" fieldId="add-app-accent">
-                                    <select id="add-app-accent" className="bookmark-select" value={draft.accent} onChange={event => update('accent', event.target.value)}>
-                                        <option value="orange">Orange</option><option value="teal">Teal</option><option value="blue">Blue</option>
-                                        <option value="green">Green</option><option value="purple">Purple</option><option value="red">Red</option><option value="none">Default</option>
-                                    </select>
-                                </FormGroup>
-                            </div>
-                        </>
+                        <ApplicationLauncherFields
+                            draft={draft}
+                            errors={errors}
+                            onChange={update}
+                            idPrefix="add-app-application"
+                        />
                     )}
                 </Form>
             </ModalBody>
