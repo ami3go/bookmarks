@@ -1,17 +1,3 @@
 .application-launcher-manager-floating {
-    position: fixed;
-    left: 1.25rem;
-    bottom: 4.75rem;
-    z-index: 350;
-}
-
-.application-launcher-manager-floating > button {
-    box-shadow: var(--pf-t--global--box-shadow--md, 0 0.25rem 0.75rem rgba(0, 0, 0, 0.22));
-}
-
-@media (max-width: 720px) {
-    .application-launcher-manager-floating {
-        left: 1rem;
-        bottom: 4.5rem;
-    }
+    display: none;
 }
