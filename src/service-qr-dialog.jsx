@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal/index.js';
 
-export function ServiceQrDialog({ target, onClose }) {
+export function ServiceQrDialog({ target, onClose, onOpenService }) {
     const [svg, setSvg] = useState('');
     const [error, setError] = useState('');
 
@@ -48,8 +48,11 @@ export function ServiceQrDialog({ target, onClose }) {
             </ModalBody>
             <ModalFooter>
                 {target && (
-                    <Button variant="primary" onClick={() => window.open(target.url, '_blank', 'noopener,noreferrer')}>
-                        Open URL
+                    <Button
+                        variant="primary"
+                        onClick={() => onOpenService({ ...target.service, openMode: 'new-tab' })}
+                    >
+                        Open in new tab
                     </Button>
                 )}
                 <Button variant="secondary" onClick={onClose}>Close</Button>
