@@ -18,6 +18,7 @@ import './update-notification.css';
 import { Application } from './app.jsx';
 import { ApplicationCardEditor } from './application-card-editor.jsx';
 import { ApplicationLauncherManager } from './application-launcher-manager.jsx';
+import { installApplicationLauncherToolbarPlacement } from './application-launcher-toolbar.js';
 import { ApplicationsCategoryMigrator } from './applications-category-migrator.jsx';
 import { installApplicationLauncherOpenInterceptor } from './application-launcher.js';
 import { TerminalCardEditor } from './terminal-card-editor.jsx';
@@ -43,4 +44,5 @@ document.addEventListener('DOMContentLoaded', () => {
             <ApplicationLauncherManager />
         </>
     );
+    installApplicationLauncherToolbarPlacement();
 });
