@@ -5,6 +5,7 @@ import { Page } from '@patternfly/react-core/dist/esm/components/Page/index.js';
 import { SearchInput } from '@patternfly/react-core/dist/esm/components/SearchInput/index.js';
 
 import { AddAppManager } from './add-app-manager.jsx';
+import { useAdminPermission, useConfiguration } from './app-providers.jsx';
 import { APPLICATION_LAUNCHER_TYPE } from './application-launcher.js';
 import {
     CONFIG_PATH,
@@ -39,12 +40,13 @@ import {
     serviceSelectionKey,
     typingTarget,
 } from './bookmark-ui.js';
-import { modifyConfiguration, watchConfiguration } from './cockpit-config.js';
+import { modifyConfiguration } from './cockpit-config.js';
 import { LauncherEditorDialog } from './launcher-editor-dialog.jsx';
 import { ManagementDialogs } from './management-dialogs.jsx';
 import { ServiceDiscovery } from './service-discovery.jsx';
 import { isLauncherService, openService as openConfiguredService, stopService } from './service-runtime.js';
 import { TERMINAL_LAUNCHER_TYPE } from './terminal-launcher.js';
+import { TerminalLauncherManager } from './terminal-launcher-manager.jsx';
 
 function PencilIcon() {
     return (
@@ -63,11 +65,11 @@ function launcherEditorType(service) {
 }
 
 export const Application = () => {
-    const [config, setConfig] = useState(DEFAULT_CONFIG);
+    const { config, configError, configMissing } = useConfiguration();
+    const canEdit = useAdminPermission();
     const [query, setQuery] = useState('');
     const [groupFilter, setGroupFilter] = useState('all');
     const [notice, setNotice] = useState(null);
-    const [canEdit, setCanEdit] = useState(null);
     const [editMode, setEditMode] = useState(false);
     const [selectedBookmark, setSelectedBookmark] = useState(null);
     const [editor, setEditor] = useState(null);
@@ -95,43 +97,38 @@ export const Application = () => {
     const [importCandidate, setImportCandidate] = useState(null);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [discoveryOpen, setDiscoveryOpen] = useState(false);
+    const [terminalManagerOpen, setTerminalManagerOpen] = useState(false);
     const [dragSource, setDragSource] = useState(null);
     const [collapsedGroups, setCollapsedGroups] = useState(loadCollapsedGroups);
     const fileInputRef = useRef(null);
 
     const hostname = window.location.hostname;
 
-    useEffect(() => watchConfiguration(
-        setConfig,
-        error => setNotice({
-            variant: 'danger',
-            text: `Could not monitor ${CONFIG_PATH}: ${window.cockpit.message(error)}`,
-        }),
-        () => setNotice({
-            variant: 'info',
-            text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
-        })
-    ), []);
+    useEffect(() => {
+        if (configError) {
+            setNotice({
+                variant: 'danger',
+                text: `Could not monitor ${CONFIG_PATH}: ${window.cockpit.message(configError)}`,
+            });
+        }
+    }, [configError]);
 
     useEffect(() => {
-        const permission = window.cockpit.permission({ admin: true });
-        const updatePermission = () => {
-            setCanEdit(permission.allowed);
-            if (!permission.allowed) {
-                setEditMode(false);
-                setAddAppOpen(false);
-                setLauncherEditorService(null);
-            }
-        };
+        if (configMissing) {
+            setNotice({
+                variant: 'info',
+                text: `No configuration found. Add your first bookmark to create ${CONFIG_PATH}.`,
+            });
+        }
+    }, [configMissing]);
 
-        updatePermission();
-        permission.addEventListener('changed', updatePermission);
-
-        return () => {
-            permission.removeEventListener('changed', updatePermission);
-            permission.close();
-        };
-    }, []);
+    useEffect(() => {
+        if (canEdit === false) {
+            setEditMode(false);
+            setAddAppOpen(false);
+            setLauncherEditorService(null);
+        }
+    }, [canEdit]);
 
     useEffect(() => {
         if (!editMode) {
@@ -141,7 +138,7 @@ export const Application = () => {
     }, [editMode]);
 
     useEffect(() => {
-        if (!editMode || editor || launcherEditorService || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen || addAppOpen)
+        if (!editMode || editor || launcherEditorService || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen || terminalManagerOpen || addAppOpen)
             return undefined;
 
         let timer;
@@ -159,7 +156,7 @@ export const Application = () => {
             window.removeEventListener('pointerdown', resetTimer);
             window.removeEventListener('keydown', resetTimer);
         };
-    }, [editMode, editor, launcherEditorService, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen, addAppOpen]);
+    }, [editMode, editor, launcherEditorService, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen, terminalManagerOpen, addAppOpen]);
 
     useEffect(() => {
         try {
@@ -175,7 +172,7 @@ export const Application = () => {
     }, [config.showSearch, query]);
 
     useEffect(() => {
-        const managementOpen = Boolean(editor || launcherEditorService || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen || addAppOpen);
+        const managementOpen = Boolean(editor || launcherEditorService || deleteTarget || moveTarget || settingsOpen || importCandidate || historyOpen || discoveryOpen || terminalManagerOpen || addAppOpen);
         const handleKeyboard = event => {
             if (managementOpen)
                 return;
@@ -222,7 +219,7 @@ export const Application = () => {
 
         document.addEventListener('keydown', handleKeyboard);
         return () => document.removeEventListener('keydown', handleKeyboard);
-    }, [query, config.showSearch, editor, launcherEditorService, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen, addAppOpen]);
+    }, [query, config.showSearch, editor, launcherEditorService, deleteTarget, moveTarget, settingsOpen, importCandidate, historyOpen, discoveryOpen, terminalManagerOpen, addAppOpen]);
 
     const groups = useMemo(
         () => normalizeGroupOrder(config.services, config.groupOrder),
@@ -337,9 +334,8 @@ export const Application = () => {
         setNotice(null);
 
         modifyConfiguration(transform, action)
-            .then(newConfig => {
+            .then(() => {
                 setSaving(false);
-                setConfig(newConfig);
                 setNotice({ variant: 'success', text: successText });
                 onSuccess?.();
             })
@@ -455,7 +451,7 @@ export const Application = () => {
             if (isLauncherService(deleteTarget.service))
                 await stopService(deleteTarget.service);
 
-            const newConfig = await modifyConfiguration(current => {
+            await modifyConfiguration(current => {
                 const index = findBookmarkIndex(current.services, deleteTarget);
                 if (index === -1)
                     throw new Error('This bookmark was changed or removed. Reload the page and try again.');
@@ -465,7 +461,6 @@ export const Application = () => {
                 };
             }, `Deleted ${deleteTarget.service?.name || 'bookmark'}`);
 
-            setConfig(newConfig);
             setNotice({ variant: 'success', text: 'Bookmark deleted.' });
             setDeleteTarget(null);
             setSelectedBookmark(null);
@@ -787,6 +782,7 @@ export const Application = () => {
                             <span> Click a card to select it, or drag a card to reorder. Edit mode locks automatically after 2 minutes of inactivity.</span>
                         </div>
                         <div className="bookmarks-management-actions">
+                            <TerminalLauncherManager inline onOpenChange={setTerminalManagerOpen} />
                             <ServiceDiscovery visible inline onOpenChange={setDiscoveryOpen} />
                             <Button variant="secondary" onClick={openSettings}>Page settings</Button>
                             <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Import JSON</Button>
