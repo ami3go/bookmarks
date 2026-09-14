@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import '@patternfly/patternfly/patternfly.css';
 import './cockpit-dark-theme.js';
 import './app.css';
+import './header-actions.css';
 import './bookmark-sections.css';
 import './bookmark-hover.css';
 import './management-dialogs.css';
