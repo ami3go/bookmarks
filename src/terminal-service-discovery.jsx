@@ -6,6 +6,7 @@ import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-co
 import { storedBookmark } from './bookmarks.js';
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import { buildDiscoveryCandidates, existingLocalBookmarkPorts, parseListeningSockets } from './discovery.js';
+import { CheckboxControl } from './form-controls.jsx';
 import { inspectGoTTYListenersSafely } from './gotty-inspect.js';
 import { applyTtydDiscoveryCandidates } from './ttyd-discovery.js';
 import { inspectTtydListenersSafely } from './ttyd-inspect.js';
@@ -181,11 +182,12 @@ export function ServiceDiscovery({ visible = true, onOpenChange, inline = false 
                                     const disabled = !candidate.supported || candidate.alreadyBookmarked;
                                     const terminalText = terminalInspectionText(candidate);
                                     return (
-                                        <label className={`bookmarks-discovery-item${disabled ? ' is-disabled' : ''}`} key={candidate.port}>
-                                            <input
-                                                type="checkbox"
-                                                checked={candidate.selected}
-                                                disabled={disabled || saving}
+                                        <div className={`bookmarks-discovery-item${disabled ? ' is-disabled' : ''}`} key={candidate.port}>
+                                            <CheckboxControl
+                                                id={`discovery-port-${candidate.port}`}
+                                                label={`Select ${candidate.name}`}
+                                                isChecked={candidate.selected}
+                                                isDisabled={disabled || saving}
                                                 onChange={() => toggleCandidate(candidate.port)}
                                             />
                                             <div className="bookmarks-discovery-details">
@@ -202,7 +204,7 @@ export function ServiceDiscovery({ visible = true, onOpenChange, inline = false 
                                                 ))}
                                             </div>
                                             <span className="bookmarks-discovery-status">{candidateStatus(candidate)}</span>
-                                        </label>
+                                        </div>
                                     );
                                 })}
                             </div>
