@@ -8,6 +8,7 @@ import {
     APPLICATION_LAUNCHER_PORT_END,
     APPLICATION_LAUNCHER_PORT_START,
 } from './application-launcher-ports.js';
+import { SelectControl } from './form-controls.jsx';
 import {
     GOTTY_LAUNCHER_PORT_END,
     GOTTY_LAUNCHER_PORT_START,
@@ -23,13 +24,18 @@ import {
 } from './terminal-launcher.js';
 
 const ACCENTS = [
-    ['teal', 'Teal'],
-    ['blue', 'Blue'],
-    ['green', 'Green'],
-    ['purple', 'Purple'],
-    ['orange', 'Orange'],
-    ['red', 'Red'],
-    ['none', 'Default'],
+    { value: 'teal', label: 'Teal' },
+    { value: 'blue', label: 'Blue' },
+    { value: 'green', label: 'Green' },
+    { value: 'purple', label: 'Purple' },
+    { value: 'orange', label: 'Orange' },
+    { value: 'red', label: 'Red' },
+    { value: 'none', label: 'Default' },
+];
+
+const TERMINAL_PROVIDERS = [
+    { value: TERMINAL_PROVIDER_GOTTY, label: 'GoTTY' },
+    { value: TERMINAL_PROVIDER_TTYD, label: 'ttyd' },
 ];
 
 function FieldError({ value }) {
@@ -39,11 +45,7 @@ function FieldError({ value }) {
 function AccentField({ id, value, onChange }) {
     return (
         <FormGroup label="Card accent" fieldId={id}>
-            <select id={id} className="bookmark-select" value={value} onChange={event => onChange(event.target.value)}>
-                {ACCENTS.map(([optionValue, label]) => (
-                    <option value={optionValue} key={optionValue}>{label}</option>
-                ))}
-            </select>
+            <SelectControl id={id} value={value} onChange={onChange} options={ACCENTS} />
         </FormGroup>
     );
 }
@@ -61,6 +63,7 @@ export function TerminalLauncherFields({
     const providerLabel = terminalProviderLabel(provider);
     const exposed = Boolean(draft && isNetworkExposedAddress(draft.address));
     const derivedUrl = draft?.id && draft?.port ? launcherUrl(draft.id, Number(draft.port)) : '';
+    const changeProvider = onProviderChange || (value => onChange('provider', value));
 
     return (
         <>
@@ -70,15 +73,12 @@ export function TerminalLauncherFields({
             </FormGroup>
 
             <FormGroup label="Terminal server" isRequired fieldId={`${idPrefix}-provider`}>
-                <select
+                <SelectControl
                     id={`${idPrefix}-provider`}
-                    className="bookmark-select"
                     value={provider}
-                    onChange={event => (onProviderChange || ((value) => onChange('provider', value)))(event.target.value)}
-                >
-                    <option value={TERMINAL_PROVIDER_GOTTY}>GoTTY</option>
-                    <option value={TERMINAL_PROVIDER_TTYD}>ttyd</option>
-                </select>
+                    onChange={changeProvider}
+                    options={TERMINAL_PROVIDERS}
+                />
                 <div className="bookmark-field-help">Existing launcher bookmarks without a provider are treated as GoTTY.</div>
             </FormGroup>
 
