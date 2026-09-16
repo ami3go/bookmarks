@@ -23,10 +23,6 @@ export function formatHistoryDate(value) {
     }
 }
 
-export function closeActionMenu(event) {
-    event.currentTarget.closest('details')?.removeAttribute('open');
-}
-
 export function loadCollapsedGroups() {
     try {
         const stored = JSON.parse(window.localStorage.getItem(COLLAPSED_GROUPS_KEY) || '[]');
