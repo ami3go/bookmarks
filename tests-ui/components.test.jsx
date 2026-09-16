@@ -8,23 +8,52 @@ const dom = new JSDOM('<!doctype html><html><body></body></html>', {
     pretendToBeVisual: true,
 });
 
-globalThis.window = dom.window;
-globalThis.document = dom.window.document;
-globalThis.navigator = dom.window.navigator;
-globalThis.HTMLElement = dom.window.HTMLElement;
-globalThis.HTMLInputElement = dom.window.HTMLInputElement;
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
-globalThis.Node = dom.window.Node;
-globalThis.Event = dom.window.Event;
-globalThis.MouseEvent = dom.window.MouseEvent;
-globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window);
-globalThis.requestAnimationFrame = callback => setTimeout(() => callback(Date.now()), 0);
-globalThis.cancelAnimationFrame = handle => clearTimeout(handle);
-globalThis.ResizeObserver = class ResizeObserver {
+function defineGlobal(name, value) {
+    Object.defineProperty(globalThis, name, {
+        configurable: true,
+        writable: true,
+        value,
+    });
+}
+
+defineGlobal('window', dom.window);
+defineGlobal('document', dom.window.document);
+defineGlobal('navigator', dom.window.navigator);
+defineGlobal('HTMLElement', dom.window.HTMLElement);
+defineGlobal('Element', dom.window.Element);
+defineGlobal('SVGElement', dom.window.SVGElement);
+defineGlobal('HTMLInputElement', dom.window.HTMLInputElement);
+defineGlobal('HTMLSelectElement', dom.window.HTMLSelectElement);
+defineGlobal('Node', dom.window.Node);
+defineGlobal('Event', dom.window.Event);
+defineGlobal('CustomEvent', dom.window.CustomEvent);
+defineGlobal('MouseEvent', dom.window.MouseEvent);
+defineGlobal('KeyboardEvent', dom.window.KeyboardEvent);
+defineGlobal('MutationObserver', dom.window.MutationObserver);
+defineGlobal('getComputedStyle', dom.window.getComputedStyle.bind(dom.window));
+defineGlobal('requestAnimationFrame', callback => setTimeout(() => callback(Date.now()), 0));
+defineGlobal('cancelAnimationFrame', handle => clearTimeout(handle));
+defineGlobal('ResizeObserver', class ResizeObserver {
     observe() {}
     unobserve() {}
     disconnect() {}
-};
+});
+
+if (!dom.window.matchMedia) {
+    dom.window.matchMedia = query => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addListener() {},
+        removeListener() {},
+        addEventListener() {},
+        removeEventListener() {},
+        dispatchEvent() { return false; },
+    });
+}
+
+if (!dom.window.scrollTo)
+    dom.window.scrollTo = () => {};
 
 const { cleanup, fireEvent, render, screen } = await import('@testing-library/react');
 const { DashboardHeader } = await import('../src/dashboard-header.jsx');
@@ -106,7 +135,7 @@ test('page settings uses PatternFly controls and reports checkbox/select changes
         showHeader: true,
         showTitle: true,
         showSearch: true,
-        displayMode: 'cards',
+        displayMode: 'standard',
     };
 
     render(
