@@ -4,7 +4,7 @@ CONFIG_DIR ?= /etc/cockpit
 CONFIG_FILE := $(CONFIG_DIR)/cockpit-bookmarks.json
 LEGACY_CONFIG_FILE := $(CONFIG_DIR)/local-services.json
 VERSION := $(shell sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)
-DEB_REVISION ?= 3
+DEB_REVISION ?= 1
 RELEASE_DIR := release
 RELEASE_NAME := $(PACKAGE_NAME)-$(VERSION)
 RELEASE_ARCHIVE := $(RELEASE_DIR)/$(RELEASE_NAME).tar.gz
@@ -43,7 +43,7 @@ install-config:
 		else \
 			install -m 0644 examples/cockpit-bookmarks.json "$(DESTDIR)$(CONFIG_FILE)"; \
 			echo "Created $(DESTDIR)$(CONFIG_FILE)"; \
-		fi; \
+		fi
 	else \
 		echo "Keeping existing $(DESTDIR)$(CONFIG_FILE)"; \
 	fi
@@ -77,9 +77,4 @@ deb-prebuilt:
 	DEB_REVISION="$(DEB_REVISION)" RELEASE_DIR="$(RELEASE_DIR)" sh packaging/build-deb.sh
 	@test -s "$(RELEASE_DEB)"
 
-release-all:
-	$(MAKE) release
-	$(MAKE) deb-prebuilt
-
-clean:
-	rm -rf dist release
+release-all: release deb-prebuilt
