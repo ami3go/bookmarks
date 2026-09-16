@@ -43,7 +43,7 @@ install-config:
 		else \
 			install -m 0644 examples/cockpit-bookmarks.json "$(DESTDIR)$(CONFIG_FILE)"; \
 			echo "Created $(DESTDIR)$(CONFIG_FILE)"; \
-		fi
+		fi; \
 	else \
 		echo "Keeping existing $(DESTDIR)$(CONFIG_FILE)"; \
 	fi
@@ -57,6 +57,9 @@ devel-uninstall:
 
 uninstall:
 	rm -rf "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
+
+clean:
+	rm -rf dist release
 
 release: clean
 	NODE_ENV=production $(MAKE) dist
