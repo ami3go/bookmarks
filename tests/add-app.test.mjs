@@ -49,6 +49,7 @@ test('GoTTY preset uses terminal defaults and Cockpit host binding', () => {
     assert.equal(draft.command, 'bash');
     assert.equal(draft.address, '{host}');
     assert.equal(draft.port, '47221');
+    assert.equal(draft.autoStopMinutes, '0');
     assert.equal(draft.group, 'Applications');
 });
 
@@ -60,5 +61,6 @@ test('ttyd preset switches provider and executable automatically', () => {
     assert.equal(draft.command, 'bash');
     assert.equal(draft.address, '{host}');
     assert.equal(draft.port, '47222');
+    assert.equal(draft.autoStopMinutes, '0');
     assert.equal(draft.group, 'Applications');
 });
