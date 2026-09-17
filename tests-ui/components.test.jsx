@@ -58,7 +58,7 @@ if (!dom.window.scrollTo)
 const { cleanup, fireEvent, render, screen, within } = await import('@testing-library/react');
 const { DashboardHeader } = await import('../src/dashboard-header.jsx');
 const { PageSettingsDialog } = await import('../src/page-settings-dialog.jsx');
-const { TerminalLauncherFields } = await import('../src/launcher-form-fields.jsx');
+const { ApplicationLauncherFields, TerminalLauncherFields } = await import('../src/launcher-form-fields.jsx');
 
 const DEFAULT_HEADER_CONFIG = {
     showHeader: true,
@@ -69,6 +69,8 @@ const DEFAULT_HEADER_CONFIG = {
     title: 'Services',
     subtitle: 'Local services',
 };
+
+const AUTO_STOP_LABELS = ['∞ — No timeout', '10m', '30m', '1h', '3h', '8h'];
 
 afterEach(() => cleanup());
 
@@ -190,9 +192,45 @@ test('terminal auto-stop selector defaults to infinity and exposes fixed timeout
     assert.equal(selector.value, '0');
     assert.deepEqual(
         within(selector).getAllByRole('option').map(option => option.textContent),
-        ['∞ — No timeout', '10m', '30m', '1h', '3h', '8h']
+        AUTO_STOP_LABELS
     );
 
     fireEvent.change(selector, { target: { value: '180' } });
     assert.deepEqual(changes.at(-1), ['autoStopMinutes', '180']);
+});
+
+test('application auto-stop selector uses the same infinity default and fixed choices', () => {
+    const changes = [];
+    const draft = {
+        id: '',
+        name: 'Agent of Empires',
+        command: 'aoe',
+        args: 'serve\n--port\n{port}',
+        bindHost: '0.0.0.0',
+        port: '8080',
+        autoStopMinutes: '0',
+        startupTimeoutSeconds: '20',
+        urlCommand: 'aoe',
+        urlArgs: 'url',
+        urlPattern: 'https?://[^\\s]+',
+        icon: '🏛️',
+        accent: 'orange',
+    };
+
+    render(
+        <ApplicationLauncherFields
+            draft={draft}
+            onChange={(field, value) => changes.push([field, value])}
+        />
+    );
+
+    const selector = screen.getByRole('combobox', { name: 'Auto-stop' });
+    assert.equal(selector.value, '0');
+    assert.deepEqual(
+        within(selector).getAllByRole('option').map(option => option.textContent),
+        AUTO_STOP_LABELS
+    );
+
+    fireEvent.change(selector, { target: { value: '480' } });
+    assert.deepEqual(changes.at(-1), ['autoStopMinutes', '480']);
 });
