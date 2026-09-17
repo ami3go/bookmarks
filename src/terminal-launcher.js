@@ -31,7 +31,8 @@ export const DEFAULT_TERMINAL_LAUNCHER = {
     args: [],
     port: 8085,
     address: '127.0.0.1',
-    autoStopMinutes: 30,
+    // 0 means no RuntimeMaxSec limit. The UI presents this as infinity.
+    autoStopMinutes: 0,
 };
 export const DEFAULT_GOTTY_LAUNCHER = DEFAULT_TERMINAL_LAUNCHER;
 
@@ -90,7 +91,9 @@ export function normalizeTerminalLauncher(value = {}) {
         args: parseLauncherArguments(value.args),
         port: Number.isInteger(port) ? port : DEFAULT_TERMINAL_LAUNCHER.port,
         address: cleanLauncherText(value.address) || DEFAULT_TERMINAL_LAUNCHER.address,
-        autoStopMinutes: Number.isFinite(autoStopMinutes) ? autoStopMinutes : DEFAULT_TERMINAL_LAUNCHER.autoStopMinutes,
+        autoStopMinutes: Number.isInteger(autoStopMinutes) && autoStopMinutes >= 0
+            ? autoStopMinutes
+            : DEFAULT_TERMINAL_LAUNCHER.autoStopMinutes,
     };
 }
 
@@ -135,8 +138,8 @@ export function validateLauncherDraft(draft) {
         errors.port = 'Use an unprivileged TCP port from 1024 to 65535.';
     if (!address || /[\s/]/.test(address))
         errors.address = 'Use a listen address such as {host}, 127.0.0.1, 0.0.0.0, ::1, or ::.';
-    if (!Number.isInteger(autoStopMinutes) || autoStopMinutes < 1 || autoStopMinutes > 720)
-        errors.autoStopMinutes = 'Auto-stop must be between 1 and 720 minutes.';
+    if (!Number.isInteger(autoStopMinutes) || autoStopMinutes < 0 || autoStopMinutes > 720)
+        errors.autoStopMinutes = 'Choose no timeout or an auto-stop value from 1 to 720 minutes.';
 
     return errors;
 }
@@ -227,7 +230,7 @@ export function buildSystemdRunArguments(service, hostname = '') {
     const command = expandLauncherHost(launcher.command, hostname);
     return buildTransientUnitArguments({
         unit: launcherUnitName(service?.id),
-        runtimeSeconds: launcher.autoStopMinutes * 60,
+        runtimeSeconds: launcher.autoStopMinutes > 0 ? launcher.autoStopMinutes * 60 : 0,
         description: `Cockpit Bookmarks ${terminalProviderLabel(launcher.provider)}: ${cleanLauncherText(service?.name) || command}`,
         command: providerArguments(launcher, service, hostname),
     });
