@@ -38,7 +38,7 @@ const TERMINAL_PROVIDERS = [
     { value: TERMINAL_PROVIDER_TTYD, label: 'ttyd' },
 ];
 
-export const TERMINAL_AUTO_STOP_OPTIONS = [
+export const LAUNCHER_AUTO_STOP_OPTIONS = [
     { value: '0', label: '∞ — No timeout' },
     { value: '10', label: '10m' },
     { value: '30', label: '30m' },
@@ -47,19 +47,22 @@ export const TERMINAL_AUTO_STOP_OPTIONS = [
     { value: '480', label: '8h' },
 ];
 
-function terminalAutoStopOptions(value) {
+// Compatibility export for existing tests/imports.
+export const TERMINAL_AUTO_STOP_OPTIONS = LAUNCHER_AUTO_STOP_OPTIONS;
+
+function launcherAutoStopOptions(value, maxMinutes) {
     const current = String(value ?? '0');
-    if (TERMINAL_AUTO_STOP_OPTIONS.some(option => option.value === current))
-        return TERMINAL_AUTO_STOP_OPTIONS;
+    if (LAUNCHER_AUTO_STOP_OPTIONS.some(option => option.value === current))
+        return LAUNCHER_AUTO_STOP_OPTIONS;
 
     const minutes = Number(current);
-    if (Number.isInteger(minutes) && minutes > 0 && minutes <= 720) {
+    if (Number.isInteger(minutes) && minutes > 0 && minutes <= maxMinutes) {
         return [
-            ...TERMINAL_AUTO_STOP_OPTIONS,
+            ...LAUNCHER_AUTO_STOP_OPTIONS,
             { value: current, label: `${minutes}m (existing)` },
         ];
     }
-    return TERMINAL_AUTO_STOP_OPTIONS;
+    return LAUNCHER_AUTO_STOP_OPTIONS;
 }
 
 function FieldError({ value }) {
@@ -88,7 +91,7 @@ export function TerminalLauncherFields({
     const exposed = Boolean(draft && isNetworkExposedAddress(draft.address));
     const derivedUrl = draft?.id && draft?.port ? launcherUrl(draft.id, Number(draft.port)) : '';
     const changeProvider = onProviderChange || (value => onChange('provider', value));
-    const autoStopOptions = terminalAutoStopOptions(draft?.autoStopMinutes);
+    const autoStopOptions = launcherAutoStopOptions(draft?.autoStopMinutes, 720);
 
     return (
         <>
@@ -213,6 +216,7 @@ export function ApplicationLauncherFields({
     idPrefix = 'application-launcher',
 }) {
     const networkFacing = useMemo(() => applicationNetworkFacing(draft), [draft]);
+    const autoStopOptions = launcherAutoStopOptions(draft?.autoStopMinutes, 1440);
 
     return (
         <>
@@ -251,9 +255,15 @@ export function ApplicationLauncherFields({
             )}
 
             <div className="gotty-launcher-grid">
-                <FormGroup label="Auto-stop minutes" isRequired fieldId={`${idPrefix}-auto-stop`}>
-                    <TextInput id={`${idPrefix}-auto-stop`} type="number" value={draft.autoStopMinutes} onChange={(_event, value) => onChange('autoStopMinutes', value)} validated={errors.autoStopMinutes ? 'error' : 'default'} />
+                <FormGroup label="Auto-stop" isRequired fieldId={`${idPrefix}-auto-stop`}>
+                    <SelectControl
+                        id={`${idPrefix}-auto-stop`}
+                        value={draft.autoStopMinutes}
+                        onChange={value => onChange('autoStopMinutes', value)}
+                        options={autoStopOptions}
+                    />
                     <FieldError value={errors.autoStopMinutes} />
+                    <div className="bookmark-field-help">∞ keeps the application running until it exits, is stopped manually, or its systemd user manager stops.</div>
                 </FormGroup>
                 <FormGroup label="Startup timeout seconds" isRequired fieldId={`${idPrefix}-startup-timeout`}>
                     <TextInput id={`${idPrefix}-startup-timeout`} type="number" value={draft.startupTimeoutSeconds} onChange={(_event, value) => onChange('startupTimeoutSeconds', value)} validated={errors.startupTimeoutSeconds ? 'error' : 'default'} />
