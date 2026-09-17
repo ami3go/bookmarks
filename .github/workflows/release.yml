@@ -3,7 +3,7 @@ name: Release
 on:
   workflow_dispatch:
   # Workflow changes merged to main deliberately exercise the full release path.
-  # v0.6.0 release trigger: keep the automated test/build/publish path authoritative.
+  # v0.7.1 release trigger: publish a uniquely versioned build containing the final launcher timeout UI.
   push:
     branches:
       - main
