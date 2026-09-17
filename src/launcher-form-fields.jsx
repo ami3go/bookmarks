@@ -38,6 +38,30 @@ const TERMINAL_PROVIDERS = [
     { value: TERMINAL_PROVIDER_TTYD, label: 'ttyd' },
 ];
 
+export const TERMINAL_AUTO_STOP_OPTIONS = [
+    { value: '0', label: '∞ — No timeout' },
+    { value: '10', label: '10m' },
+    { value: '30', label: '30m' },
+    { value: '60', label: '1h' },
+    { value: '180', label: '3h' },
+    { value: '480', label: '8h' },
+];
+
+function terminalAutoStopOptions(value) {
+    const current = String(value ?? '0');
+    if (TERMINAL_AUTO_STOP_OPTIONS.some(option => option.value === current))
+        return TERMINAL_AUTO_STOP_OPTIONS;
+
+    const minutes = Number(current);
+    if (Number.isInteger(minutes) && minutes > 0 && minutes <= 720) {
+        return [
+            ...TERMINAL_AUTO_STOP_OPTIONS,
+            { value: current, label: `${minutes}m (existing)` },
+        ];
+    }
+    return TERMINAL_AUTO_STOP_OPTIONS;
+}
+
 function FieldError({ value }) {
     return value ? <div className="bookmark-field-error">{value}</div> : null;
 }
@@ -64,6 +88,7 @@ export function TerminalLauncherFields({
     const exposed = Boolean(draft && isNetworkExposedAddress(draft.address));
     const derivedUrl = draft?.id && draft?.port ? launcherUrl(draft.id, Number(draft.port)) : '';
     const changeProvider = onProviderChange || (value => onChange('provider', value));
+    const autoStopOptions = terminalAutoStopOptions(draft?.autoStopMinutes);
 
     return (
         <>
@@ -123,9 +148,15 @@ export function TerminalLauncherFields({
                     <FieldError value={errors.port} />
                     <div className="bookmark-field-help">Automatic terminal launchers normally use {GOTTY_LAUNCHER_PORT_START}-{GOTTY_LAUNCHER_PORT_END}; any valid unprivileged port may be entered.</div>
                 </FormGroup>
-                <FormGroup label="Auto-stop minutes" isRequired fieldId={`${idPrefix}-auto-stop`}>
-                    <TextInput id={`${idPrefix}-auto-stop`} type="number" value={draft.autoStopMinutes} onChange={(_event, value) => onChange('autoStopMinutes', value)} validated={errors.autoStopMinutes ? 'error' : 'default'} />
+                <FormGroup label="Auto-stop" isRequired fieldId={`${idPrefix}-auto-stop`}>
+                    <SelectControl
+                        id={`${idPrefix}-auto-stop`}
+                        value={draft.autoStopMinutes}
+                        onChange={value => onChange('autoStopMinutes', value)}
+                        options={autoStopOptions}
+                    />
                     <FieldError value={errors.autoStopMinutes} />
+                    <div className="bookmark-field-help">∞ keeps the terminal running until it exits, is stopped manually, or its systemd user manager stops.</div>
                 </FormGroup>
             </div>
 
