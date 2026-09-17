@@ -26,11 +26,11 @@ test('custom application defaults preserve automatic application settings', () =
     assert.equal(draft.name, 'Custom app');
     assert.equal(draft.port, '47321');
     assert.equal(draft.bindHost, '0.0.0.0');
-    assert.equal(draft.autoStopMinutes, '120');
+    assert.equal(draft.autoStopMinutes, '0');
     assert.equal(draft.startupTimeoutSeconds, '20');
 });
 
-test('Agent of Empires preset is ready to launch', () => {
+test('Agent of Empires preset is ready to launch without an auto-stop timeout', () => {
     const draft = createAddAppDraft(APP_TYPE_AGENT_OF_EMPIRES, 47322);
     assert.equal(draft.name, 'Agent of Empires');
     assert.equal(draft.command, 'aoe');
@@ -39,6 +39,7 @@ test('Agent of Empires preset is ready to launch', () => {
     assert.equal(draft.urlCommand, 'aoe');
     assert.equal(draft.urlArgs, 'url');
     assert.equal(draft.port, '47322');
+    assert.equal(draft.autoStopMinutes, '0');
 });
 
 test('GoTTY preset uses terminal defaults and Cockpit host binding', () => {
@@ -49,6 +50,7 @@ test('GoTTY preset uses terminal defaults and Cockpit host binding', () => {
     assert.equal(draft.command, 'bash');
     assert.equal(draft.address, '{host}');
     assert.equal(draft.port, '47221');
+    assert.equal(draft.autoStopMinutes, '0');
     assert.equal(draft.group, 'Applications');
 });
 
@@ -60,5 +62,6 @@ test('ttyd preset switches provider and executable automatically', () => {
     assert.equal(draft.command, 'bash');
     assert.equal(draft.address, '{host}');
     assert.equal(draft.port, '47222');
+    assert.equal(draft.autoStopMinutes, '0');
     assert.equal(draft.group, 'Applications');
 });

@@ -29,19 +29,25 @@ export function probeAddress(value) {
 }
 
 export function buildTransientUnitArguments({ unit, runtimeSeconds, description, command }) {
-    return [
+    const args = [
         'systemd-run',
         '--user',
         `--unit=${unit}`,
         '--collect',
         '--quiet',
         '--service-type=exec',
-        `--property=RuntimeMaxSec=${Math.round(runtimeSeconds)}`,
+    ];
+
+    if (Number.isFinite(runtimeSeconds) && runtimeSeconds > 0)
+        args.push(`--property=RuntimeMaxSec=${Math.round(runtimeSeconds)}`);
+
+    args.push(
         '--property=KillMode=control-group',
         `--description=${description}`,
         '--',
         ...command,
-    ];
+    );
+    return args;
 }
 
 export async function userUnitActive(cockpit, unit) {

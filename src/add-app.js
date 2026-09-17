@@ -6,8 +6,6 @@ import {
     launcherDraft,
 } from './terminal-launcher.js';
 
-export const ADD_APP_EVENT = 'cockpit-bookmarks:add-app';
-
 export const APP_TYPE_CUSTOM = 'custom';
 export const APP_TYPE_GOTTY = 'gotty';
 export const APP_TYPE_TTYD = 'ttyd';

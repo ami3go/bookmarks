@@ -3,6 +3,7 @@ import { Card, CardBody, CardTitle } from '@patternfly/react-core/dist/esm/compo
 
 import { normalizeAccent, serviceEndpoints, serviceGroup } from './bookmarks.js';
 import { serviceSelectionKey } from './bookmark-ui.js';
+import { SelectControl } from './form-controls.jsx';
 import { ServiceActionMenu } from './service-action-menu.jsx';
 import { serviceStatusKey, statusLabel } from './use-service-statuses.js';
 
@@ -48,11 +49,6 @@ export function ServiceCard({
     const serviceStatus = status || { state: 'unknown' };
     const accent = normalizeAccent(service.accent);
     const statusKey = serviceStatusKey(service);
-
-    const chooseEndpoint = event => {
-        event.stopPropagation();
-        setEndpointIndex(Number(event.target.value));
-    };
 
     return (
         <Card
@@ -147,18 +143,19 @@ export function ServiceCard({
             </CardTitle>
             <CardBody>
                 {endpoints.length > 1 && (
-                    <label
+                    <div
                         className="bookmark-endpoint-picker"
                         onClick={event => event.stopPropagation()}
                         onKeyDown={event => event.stopPropagation()}
                     >
                         <span>Address</span>
-                        <select value={endpointIndex} onChange={chooseEndpoint}>
-                            {endpoints.map((endpoint, index) => (
-                                <option value={index} key={`${endpoint.label}-${endpoint.url}`}>{endpoint.label}</option>
-                            ))}
-                        </select>
-                    </label>
+                        <SelectControl
+                            value={endpointIndex}
+                            ariaLabel={`Address for ${service.name || 'service'}`}
+                            onChange={value => setEndpointIndex(Number(value))}
+                            options={endpoints.map((endpoint, index) => ({ value: index, label: endpoint.label }))}
+                        />
+                    </div>
                 )}
                 <p className="bookmark-description">{service.description || selectedEndpoint.url}</p>
                 <div className="bookmark-meta">

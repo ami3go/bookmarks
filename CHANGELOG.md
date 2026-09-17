@@ -6,6 +6,35 @@ The project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-16
+
+### Added
+
+- Unified **Add app** workflow with Custom, GoTTY, ttyd, and Agent of Empires presets.
+- Agent of Empires preset prefers its native TCP port 8080 and falls back to the managed application port range when needed.
+- Shared service and launcher runtime layers for bookmark opening, transient systemd units, port probing, readiness checks, logs, and launcher shutdown.
+- Central React configuration and administrator-permission providers.
+- Versioned configuration migration with `schemaVersion: 1`; legacy launcher groups migrate to the Applications category before the UI consumes the configuration.
+- Component-level UI regression tests using React Testing Library and jsdom.
+
+### Changed
+
+- Dashboard composition is split into focused header, edit-toolbar, service-view, keyboard/timeout, and bookmark-management modules instead of one large application component.
+- Bookmark management dialogs are split into dedicated editor, move, delete, settings, import, and history components.
+- Terminal/application launcher forms share reusable form fields and runtime infrastructure.
+- Card action menus use PatternFly Dropdown/MenuToggle directly instead of DOM-cloned floating menus.
+- Native select/checkbox controls in the dashboard, launcher forms, settings, and discovery are replaced with PatternFly controls.
+- PatternFly packages are updated from 6.1.0 to 6.6.1 while React remains on 18.3.1.
+- Package and lockfile metadata are aligned to 0.7.0 and the Debian package revision resets to `0.7.0-1`.
+
+### Reliability and maintainability
+
+- Removed MutationObserver/DOM-proxy UI routing used by older header and card-editor integrations.
+- Removed global launcher `window.open` interception; cards and action menus now route through explicit service strategies.
+- Removed obsolete GoTTY/application manager and floating-menu compatibility implementations where no callers remain.
+- Launcher editing receives the real service object rather than rediscovering cards from rendered text.
+- Existing v0.6 and older configuration files remain readable through the migration/normalization boundary.
+
 ## [0.6.0] - 2026-09-13
 
 ### Added

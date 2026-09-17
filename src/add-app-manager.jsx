@@ -25,6 +25,7 @@ import {
     findAvailableApplicationLauncherPort,
 } from './application-launcher-ports.js';
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
+import { SelectControl } from './form-controls.jsx';
 import {
     GOTTY_LAUNCHER_PORT_END,
     GOTTY_LAUNCHER_PORT_START,
@@ -184,17 +185,13 @@ export function AddAppManager({ isOpen = false, onClose, onSaved }) {
 
                 <Form id="add-app-form" onSubmit={save}>
                     <FormGroup label="Application type" isRequired fieldId="add-app-type">
-                        <select
+                        <SelectControl
                             id="add-app-type"
-                            className="bookmark-select"
                             value={appType}
-                            onChange={event => prepareType(event.target.value)}
-                            disabled={saving}
-                        >
-                            {ADD_APP_TYPES.map(type => (
-                                <option value={type.value} key={type.value}>{type.label}</option>
-                            ))}
-                        </select>
+                            onChange={prepareType}
+                            isDisabled={saving}
+                            options={ADD_APP_TYPES}
+                        />
                         <div className="bookmark-field-help">
                             Choosing a type loads its launcher fields and defaults. Agent of Empires prefers its native port {AGENT_OF_EMPIRES_DEFAULT_PORT}; other web apps use the managed application range.
                         </div>

@@ -8,6 +8,7 @@ import {
     APPLICATION_LAUNCHER_PORT_END,
     APPLICATION_LAUNCHER_PORT_START,
 } from './application-launcher-ports.js';
+import { SelectControl } from './form-controls.jsx';
 import {
     GOTTY_LAUNCHER_PORT_END,
     GOTTY_LAUNCHER_PORT_START,
@@ -23,14 +24,46 @@ import {
 } from './terminal-launcher.js';
 
 const ACCENTS = [
-    ['teal', 'Teal'],
-    ['blue', 'Blue'],
-    ['green', 'Green'],
-    ['purple', 'Purple'],
-    ['orange', 'Orange'],
-    ['red', 'Red'],
-    ['none', 'Default'],
+    { value: 'teal', label: 'Teal' },
+    { value: 'blue', label: 'Blue' },
+    { value: 'green', label: 'Green' },
+    { value: 'purple', label: 'Purple' },
+    { value: 'orange', label: 'Orange' },
+    { value: 'red', label: 'Red' },
+    { value: 'none', label: 'Default' },
 ];
+
+const TERMINAL_PROVIDERS = [
+    { value: TERMINAL_PROVIDER_GOTTY, label: 'GoTTY' },
+    { value: TERMINAL_PROVIDER_TTYD, label: 'ttyd' },
+];
+
+export const LAUNCHER_AUTO_STOP_OPTIONS = [
+    { value: '0', label: '∞ — No timeout' },
+    { value: '10', label: '10m' },
+    { value: '30', label: '30m' },
+    { value: '60', label: '1h' },
+    { value: '180', label: '3h' },
+    { value: '480', label: '8h' },
+];
+
+// Compatibility export for existing tests/imports.
+export const TERMINAL_AUTO_STOP_OPTIONS = LAUNCHER_AUTO_STOP_OPTIONS;
+
+function launcherAutoStopOptions(value, maxMinutes) {
+    const current = String(value ?? '0');
+    if (LAUNCHER_AUTO_STOP_OPTIONS.some(option => option.value === current))
+        return LAUNCHER_AUTO_STOP_OPTIONS;
+
+    const minutes = Number(current);
+    if (Number.isInteger(minutes) && minutes > 0 && minutes <= maxMinutes) {
+        return [
+            ...LAUNCHER_AUTO_STOP_OPTIONS,
+            { value: current, label: `${minutes}m (existing)` },
+        ];
+    }
+    return LAUNCHER_AUTO_STOP_OPTIONS;
+}
 
 function FieldError({ value }) {
     return value ? <div className="bookmark-field-error">{value}</div> : null;
@@ -39,11 +72,7 @@ function FieldError({ value }) {
 function AccentField({ id, value, onChange }) {
     return (
         <FormGroup label="Card accent" fieldId={id}>
-            <select id={id} className="bookmark-select" value={value} onChange={event => onChange(event.target.value)}>
-                {ACCENTS.map(([optionValue, label]) => (
-                    <option value={optionValue} key={optionValue}>{label}</option>
-                ))}
-            </select>
+            <SelectControl id={id} value={value} onChange={onChange} options={ACCENTS} />
         </FormGroup>
     );
 }
@@ -61,6 +90,8 @@ export function TerminalLauncherFields({
     const providerLabel = terminalProviderLabel(provider);
     const exposed = Boolean(draft && isNetworkExposedAddress(draft.address));
     const derivedUrl = draft?.id && draft?.port ? launcherUrl(draft.id, Number(draft.port)) : '';
+    const changeProvider = onProviderChange || (value => onChange('provider', value));
+    const autoStopOptions = launcherAutoStopOptions(draft?.autoStopMinutes, 720);
 
     return (
         <>
@@ -70,15 +101,12 @@ export function TerminalLauncherFields({
             </FormGroup>
 
             <FormGroup label="Terminal server" isRequired fieldId={`${idPrefix}-provider`}>
-                <select
+                <SelectControl
                     id={`${idPrefix}-provider`}
-                    className="bookmark-select"
                     value={provider}
-                    onChange={event => (onProviderChange || ((value) => onChange('provider', value)))(event.target.value)}
-                >
-                    <option value={TERMINAL_PROVIDER_GOTTY}>GoTTY</option>
-                    <option value={TERMINAL_PROVIDER_TTYD}>ttyd</option>
-                </select>
+                    onChange={changeProvider}
+                    options={TERMINAL_PROVIDERS}
+                />
                 <div className="bookmark-field-help">Existing launcher bookmarks without a provider are treated as GoTTY.</div>
             </FormGroup>
 
@@ -123,9 +151,15 @@ export function TerminalLauncherFields({
                     <FieldError value={errors.port} />
                     <div className="bookmark-field-help">Automatic terminal launchers normally use {GOTTY_LAUNCHER_PORT_START}-{GOTTY_LAUNCHER_PORT_END}; any valid unprivileged port may be entered.</div>
                 </FormGroup>
-                <FormGroup label="Auto-stop minutes" isRequired fieldId={`${idPrefix}-auto-stop`}>
-                    <TextInput id={`${idPrefix}-auto-stop`} type="number" value={draft.autoStopMinutes} onChange={(_event, value) => onChange('autoStopMinutes', value)} validated={errors.autoStopMinutes ? 'error' : 'default'} />
+                <FormGroup label="Auto-stop" isRequired fieldId={`${idPrefix}-auto-stop`}>
+                    <SelectControl
+                        id={`${idPrefix}-auto-stop`}
+                        value={draft.autoStopMinutes}
+                        onChange={value => onChange('autoStopMinutes', value)}
+                        options={autoStopOptions}
+                    />
                     <FieldError value={errors.autoStopMinutes} />
+                    <div className="bookmark-field-help">∞ keeps the terminal running until it exits, is stopped manually, or its systemd user manager stops.</div>
                 </FormGroup>
             </div>
 
@@ -182,6 +216,7 @@ export function ApplicationLauncherFields({
     idPrefix = 'application-launcher',
 }) {
     const networkFacing = useMemo(() => applicationNetworkFacing(draft), [draft]);
+    const autoStopOptions = launcherAutoStopOptions(draft?.autoStopMinutes, 1440);
 
     return (
         <>
@@ -220,9 +255,15 @@ export function ApplicationLauncherFields({
             )}
 
             <div className="gotty-launcher-grid">
-                <FormGroup label="Auto-stop minutes" isRequired fieldId={`${idPrefix}-auto-stop`}>
-                    <TextInput id={`${idPrefix}-auto-stop`} type="number" value={draft.autoStopMinutes} onChange={(_event, value) => onChange('autoStopMinutes', value)} validated={errors.autoStopMinutes ? 'error' : 'default'} />
+                <FormGroup label="Auto-stop" isRequired fieldId={`${idPrefix}-auto-stop`}>
+                    <SelectControl
+                        id={`${idPrefix}-auto-stop`}
+                        value={draft.autoStopMinutes}
+                        onChange={value => onChange('autoStopMinutes', value)}
+                        options={autoStopOptions}
+                    />
                     <FieldError value={errors.autoStopMinutes} />
+                    <div className="bookmark-field-help">∞ keeps the application running until it exits, is stopped manually, or its systemd user manager stops.</div>
                 </FormGroup>
                 <FormGroup label="Startup timeout seconds" isRequired fieldId={`${idPrefix}-startup-timeout`}>
                     <TextInput id={`${idPrefix}-startup-timeout`} type="number" value={draft.startupTimeoutSeconds} onChange={(_event, value) => onChange('startupTimeoutSeconds', value)} validated={errors.startupTimeoutSeconds ? 'error' : 'default'} />

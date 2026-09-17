@@ -22,7 +22,8 @@ export const DEFAULT_APPLICATION_LAUNCHER = {
     args: [],
     bindHost: '0.0.0.0',
     port: 47300,
-    autoStopMinutes: 120,
+    // 0 means no RuntimeMaxSec limit. The UI presents this as infinity.
+    autoStopMinutes: 0,
     startupTimeoutSeconds: 20,
     urlCommand: '',
     urlArgs: [],
@@ -68,7 +69,9 @@ export function normalizeApplicationLauncher(value = {}) {
         args: parseApplicationArguments(value.args),
         bindHost: cleanLauncherText(value.bindHost) || DEFAULT_APPLICATION_LAUNCHER.bindHost,
         port: Number.isInteger(port) ? port : DEFAULT_APPLICATION_LAUNCHER.port,
-        autoStopMinutes: Number.isFinite(autoStopMinutes) ? autoStopMinutes : DEFAULT_APPLICATION_LAUNCHER.autoStopMinutes,
+        autoStopMinutes: Number.isInteger(autoStopMinutes) && autoStopMinutes >= 0
+            ? autoStopMinutes
+            : DEFAULT_APPLICATION_LAUNCHER.autoStopMinutes,
         startupTimeoutSeconds: Number.isFinite(startupTimeoutSeconds) ? startupTimeoutSeconds : DEFAULT_APPLICATION_LAUNCHER.startupTimeoutSeconds,
         urlCommand: cleanLauncherText(value.urlCommand),
         urlArgs: parseApplicationArguments(value.urlArgs),
@@ -126,8 +129,8 @@ export function validateApplicationDraft(draft) {
         errors.bindHost = 'Use a bind address such as 0.0.0.0, 127.0.0.1, ::, or ::1.';
     if (!Number.isInteger(port) || port < 1024 || port > 65535)
         errors.port = 'Use an unprivileged TCP port from 1024 to 65535.';
-    if (!Number.isInteger(autoStopMinutes) || autoStopMinutes < 1 || autoStopMinutes > 1440)
-        errors.autoStopMinutes = 'Auto-stop must be between 1 and 1440 minutes.';
+    if (!Number.isInteger(autoStopMinutes) || autoStopMinutes < 0 || autoStopMinutes > 1440)
+        errors.autoStopMinutes = 'Choose no timeout or an auto-stop value from 1 to 1440 minutes.';
     if (!Number.isInteger(startupTimeoutSeconds) || startupTimeoutSeconds < 3 || startupTimeoutSeconds > 120)
         errors.startupTimeoutSeconds = 'Startup timeout must be between 3 and 120 seconds.';
     try {
@@ -190,7 +193,7 @@ export function buildApplicationSystemdRunArguments(service, hostname = '') {
     const args = launcher.args.map(arg => expandApplicationTemplate(arg, hostname, launcher));
     return buildTransientUnitArguments({
         unit: applicationUnitName(service?.id),
-        runtimeSeconds: launcher.autoStopMinutes * 60,
+        runtimeSeconds: launcher.autoStopMinutes > 0 ? launcher.autoStopMinutes * 60 : 0,
         description: `Cockpit Bookmarks application: ${cleanLauncherText(service?.name) || command}`,
         command: [command, ...args],
     });

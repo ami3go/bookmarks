@@ -45,7 +45,7 @@ test('builds deterministic application launcher identity', () => {
     assert.equal(applicationUnitName('abc-123'), 'cockpit-bookmarks-app-abc-123.service');
 });
 
-test('builds Agent of Empires preset without persisting an auth token', () => {
+test('builds Agent of Empires preset without persisting an auth token or auto-stop limit', () => {
     const draft = { ...agentOfEmpiresDraft(47300), id: 'aoe-test' };
     const service = buildApplicationService(draft);
     assert.equal(service.type, APPLICATION_LAUNCHER_TYPE);
@@ -53,12 +53,14 @@ test('builds Agent of Empires preset without persisting an auth token', () => {
     assert.equal(service.applicationLauncher.command, 'aoe');
     assert.deepEqual(service.applicationLauncher.args.slice(0, 5), ['serve', '--host', '{bind}', '--port', '{port}']);
     assert.equal(service.applicationLauncher.bindHost, '0.0.0.0');
+    assert.equal(service.applicationLauncher.autoStopMinutes, 0);
     assert.equal(service.applicationLauncher.urlCommand, 'aoe');
     assert.deepEqual(service.applicationLauncher.urlArgs, ['url']);
     assert.equal(service.url.includes('token='), false);
     assert.equal(JSON.stringify(service).includes('token='), false);
 
     const argv = buildApplicationSystemdRunArguments(service, 'mini-pc.local');
+    assert.equal(argv.some(arg => String(arg).startsWith('--property=RuntimeMaxSec=')), false);
     const commandIndex = argv.indexOf('aoe');
     assert.ok(commandIndex > 0);
     assert.deepEqual(argv.slice(commandIndex), [
@@ -95,15 +97,16 @@ test('uses first capture group when URL pattern contains one', () => {
     assert.equal(extractApplicationUrl(output, 'url=\\[(https?://[^\\]]+)\\]'), 'http://127.0.0.1:47300/path?q=1');
 });
 
-test('validates web launcher parameters', () => {
+test('validates web launcher parameters including no-timeout mode', () => {
     assert.deepEqual(validateApplicationDraft(BASE), {});
+    assert.deepEqual(validateApplicationDraft({ ...BASE, autoStopMinutes: '0' }), {});
     const errors = validateApplicationDraft({
         ...BASE,
         name: '',
         command: '',
         bindHost: 'bad host/path',
         port: '80',
-        autoStopMinutes: '0',
+        autoStopMinutes: '-1',
         startupTimeoutSeconds: '1',
         urlPattern: '(',
     });

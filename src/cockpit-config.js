@@ -6,10 +6,12 @@ import {
     normalizeConfig,
     withHistory,
 } from './bookmarks.js';
+import { CURRENT_CONFIG_SCHEMA_VERSION, migrateConfiguration } from './config-migrations.js';
 
 export function emptyConfiguration() {
     return {
         ...DEFAULT_CONFIG,
+        schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
         groupOrder: [],
         services: [],
         history: [],
@@ -17,7 +19,9 @@ export function emptyConfiguration() {
 }
 
 export function configurationFromContent(content) {
-    return content === null ? emptyConfiguration() : normalizeConfig(content);
+    return content === null
+        ? emptyConfiguration()
+        : normalizeConfig(migrateConfiguration(content));
 }
 
 export function watchConfiguration(onConfig, onError, onMissing) {
@@ -42,7 +46,7 @@ export function watchConfiguration(onConfig, onError, onMissing) {
         }
 
         try {
-            onConfig(normalizeConfig(content));
+            onConfig(configurationFromContent(content));
         } catch (loadError) {
             onError?.(loadError);
         }
@@ -78,11 +82,14 @@ export async function modifyConfiguration(transform, action) {
     try {
         const newContent = await file.modify(oldContent => {
             const current = configurationFromContent(oldContent);
-            const next = transform(current);
+            const next = {
+                ...transform(current),
+                schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+            };
             const actionText = typeof action === 'function' ? action(current, next) : action;
             return withHistory(current, next, actionText);
         });
-        return normalizeConfig(newContent);
+        return configurationFromContent(newContent);
     } finally {
         file.close();
     }
