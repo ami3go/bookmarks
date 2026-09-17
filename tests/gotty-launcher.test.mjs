@@ -8,6 +8,7 @@ import {
     expandLauncherHost,
     formatLauncherArguments,
     isNetworkExposedAddress,
+    launcherDraft,
     launcherIdFromUrl,
     launcherPath,
     launcherUnitName,
@@ -52,6 +53,23 @@ test('stores MC as an on-demand GoTTY launcher bookmark', () => {
     assert.equal(service.openMode, undefined);
 });
 
+test('new terminal launchers default to no auto-stop timeout', () => {
+    const draft = launcherDraft(null, 47221);
+    assert.equal(draft.autoStopMinutes, '0');
+
+    const service = buildLauncherService({
+        ...draft,
+        id: 'no-timeout',
+        name: 'Terminal',
+        command: 'bash',
+    });
+    assert.equal(service.gottyLauncher.autoStopMinutes, 0);
+    assert.deepEqual(validateLauncherDraft({ ...draft, name: 'Terminal', command: 'bash' }), {});
+
+    const argv = buildSystemdRunArguments(service);
+    assert.equal(argv.some(value => value.startsWith('--property=RuntimeMaxSec=')), false);
+});
+
 test('passes application parameters as individual argv entries without shell parsing', () => {
     const service = buildLauncherService({
         ...BASE_DRAFT,
@@ -89,6 +107,7 @@ test('supports btop and fish profiles with the same launcher model', () => {
 
 test('validates ports, runtime, and required commands', () => {
     assert.deepEqual(validateLauncherDraft(BASE_DRAFT), {});
+    assert.deepEqual(validateLauncherDraft({ ...BASE_DRAFT, autoStopMinutes: '0' }), {});
 
     const errors = validateLauncherDraft({
         ...BASE_DRAFT,
@@ -96,7 +115,7 @@ test('validates ports, runtime, and required commands', () => {
         command: '',
         port: '80',
         address: 'bad address/path',
-        autoStopMinutes: '0',
+        autoStopMinutes: '-1',
     });
     assert.ok(errors.name);
     assert.ok(errors.command);
