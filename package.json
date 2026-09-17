@@ -1,6 +1,6 @@
 {
   "name": "cockpit-bookmarks",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "private": true,
   "description": "Cockpit plugin for bookmarks to services hosted on the same machine",
   "type": "module",

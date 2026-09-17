@@ -6,6 +6,20 @@ The project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-09-17
+
+### Changed
+
+- Terminal and application launchers now use the same fixed Auto-stop selector: `∞ — No timeout`, 10m, 30m, 1h, 3h, and 8h.
+- New GoTTY, ttyd, Custom app, and Agent of Empires launchers default to `∞ — No timeout` instead of a numeric timeout.
+- Existing positive custom timeout values remain selectable as an `existing` option when editing older launcher configurations.
+
+### Fixed
+
+- `0` now has an explicit, consistent meaning across terminal and application launchers: no automatic timeout. In this mode transient systemd units omit `RuntimeMaxSec` entirely.
+- Agent of Empires and other web applications no longer render the legacy numeric Auto-stop textbox in the final v0.7.1 build.
+- Release metadata is bumped to 0.7.1 so the corrected launcher UI cannot be confused with earlier intermediate builds labeled 0.7.0.
+
 ## [0.7.0] - 2026-09-16
 
 ### Added
