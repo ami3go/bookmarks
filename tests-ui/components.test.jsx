@@ -55,9 +55,10 @@ if (!dom.window.matchMedia) {
 if (!dom.window.scrollTo)
     dom.window.scrollTo = () => {};
 
-const { cleanup, fireEvent, render, screen } = await import('@testing-library/react');
+const { cleanup, fireEvent, render, screen, within } = await import('@testing-library/react');
 const { DashboardHeader } = await import('../src/dashboard-header.jsx');
 const { PageSettingsDialog } = await import('../src/page-settings-dialog.jsx');
+const { TerminalLauncherFields } = await import('../src/launcher-form-fields.jsx');
 
 const DEFAULT_HEADER_CONFIG = {
     showHeader: true,
@@ -159,4 +160,39 @@ test('page settings uses PatternFly controls and reports checkbox/select changes
         ['showSearch', false],
         ['displayMode', 'compact'],
     ]);
+});
+
+test('terminal auto-stop selector defaults to infinity and exposes fixed timeout choices', () => {
+    const changes = [];
+    const draft = {
+        id: '',
+        name: 'GoTTY Terminal',
+        provider: 'gotty',
+        binary: 'gotty',
+        command: 'bash',
+        args: '',
+        port: '47200',
+        address: '{host}',
+        autoStopMinutes: '0',
+        group: 'Applications',
+        icon: '⌨️',
+        accent: 'teal',
+    };
+
+    render(
+        <TerminalLauncherFields
+            draft={draft}
+            onChange={(field, value) => changes.push([field, value])}
+        />
+    );
+
+    const selector = screen.getByRole('combobox', { name: 'Auto-stop' });
+    assert.equal(selector.value, '0');
+    assert.deepEqual(
+        within(selector).getAllByRole('option').map(option => option.textContent),
+        ['∞ — No timeout', '10m', '30m', '1h', '3h', '8h']
+    );
+
+    fireEvent.change(selector, { target: { value: '180' } });
+    assert.deepEqual(changes.at(-1), ['autoStopMinutes', '180']);
 });
