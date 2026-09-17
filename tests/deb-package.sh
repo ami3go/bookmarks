@@ -2,7 +2,8 @@
 set -eu
 
 VERSION="$(sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)"
-DEB_REVISION="${DEB_REVISION:-3}"
+MAKEFILE_DEB_REVISION="$(sed -n 's/^DEB_REVISION ?= //p' Makefile | head -n 1)"
+DEB_REVISION="${DEB_REVISION:-$MAKEFILE_DEB_REVISION}"
 DEB_VERSION="${VERSION}-${DEB_REVISION}"
 DEB="release/cockpit-bookmarks_${DEB_VERSION}_all.deb"
 ARCHIVE="release/cockpit-bookmarks-${VERSION}.tar.gz"
@@ -13,6 +14,7 @@ fail() {
     exit 1
 }
 
+[ -n "$DEB_REVISION" ] || fail "could not determine Debian revision from Makefile"
 sh -n packaging/local-apt-test.sh || fail "local APT test helper has invalid shell syntax"
 
 test -s "$DEB" || fail "missing $DEB"
