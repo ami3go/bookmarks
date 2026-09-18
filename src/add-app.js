@@ -1,4 +1,5 @@
 import { agentOfEmpiresDraft, applicationDraft } from './application-launcher.js';
+import { resolveExecutablePath } from './launcher-runtime.js';
 import {
     TERMINAL_PROVIDER_GOTTY,
     TERMINAL_PROVIDER_TTYD,
@@ -31,6 +32,25 @@ export function addAppTypeLabel(value) {
 export function isTerminalAddAppType(value) {
     const type = normalizeAddAppType(value);
     return type === APP_TYPE_GOTTY || type === APP_TYPE_TTYD;
+}
+
+export async function resolveApplicationCommandPaths(cockpit, draft) {
+    if (!draft)
+        return draft;
+
+    const originalCommand = String(draft.command || '').trim();
+    if (!originalCommand)
+        return draft;
+
+    const command = await resolveExecutablePath(cockpit, originalCommand);
+    let urlCommand = draft.urlCommand;
+    if (urlCommand) {
+        urlCommand = String(urlCommand).trim() === originalCommand
+            ? command
+            : await resolveExecutablePath(cockpit, urlCommand);
+    }
+
+    return { ...draft, command, urlCommand };
 }
 
 export function createAddAppDraft(value, port) {

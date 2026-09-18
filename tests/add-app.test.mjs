@@ -10,6 +10,7 @@ import {
     createAddAppDraft,
     isTerminalAddAppType,
     normalizeAddAppType,
+    resolveApplicationCommandPaths,
 } from '../src/add-app.js';
 
 test('add-app type normalization and labels are stable', () => {
@@ -64,4 +65,32 @@ test('ttyd preset switches provider and executable automatically', () => {
     assert.equal(draft.port, '47222');
     assert.equal(draft.autoStopMinutes, '0');
     assert.equal(draft.group, 'Applications');
+});
+
+
+test('Agent of Empires resolves command and live URL command to the discovered binary', async () => {
+    const draft = createAddAppDraft(APP_TYPE_AGENT_OF_EMPIRES, 47322);
+    const calls = [];
+    const cockpit = {
+        spawn: async args => {
+            calls.push(args);
+            return 'aoe: /home/test/.local/bin/aoe\n';
+        },
+    };
+
+    const resolved = await resolveApplicationCommandPaths(cockpit, draft);
+    assert.equal(resolved.command, '/home/test/.local/bin/aoe');
+    assert.equal(resolved.urlCommand, '/home/test/.local/bin/aoe');
+    assert.deepEqual(calls, [['whereis', '-b', 'aoe']]);
+});
+
+test('application command resolution preserves preset names when whereis finds nothing', async () => {
+    const draft = createAddAppDraft(APP_TYPE_AGENT_OF_EMPIRES, 47323);
+    const cockpit = {
+        spawn: async () => 'aoe:\n',
+    };
+
+    const resolved = await resolveApplicationCommandPaths(cockpit, draft);
+    assert.equal(resolved.command, 'aoe');
+    assert.equal(resolved.urlCommand, 'aoe');
 });

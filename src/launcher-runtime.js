@@ -8,6 +8,25 @@ export function cleanLauncherText(value) {
     return String(value || '').replace(/[\0\r\n]/g, '').trim();
 }
 
+export async function resolveExecutablePath(cockpit, executable) {
+    const command = cleanLauncherText(executable);
+    if (!command || command.includes('/') || !cockpit?.spawn)
+        return command;
+
+    try {
+        const output = await cockpit.spawn(['whereis', '-b', command], { err: 'ignore' });
+        const text = String(output || '').trim();
+        const separator = text.indexOf(':');
+        const candidates = (separator >= 0 ? text.slice(separator + 1) : text)
+            .trim()
+            .split(/\s+/)
+            .filter(path => path.startsWith('/'));
+        return candidates[0] || command;
+    } catch (_) {
+        return command;
+    }
+}
+
 export function parseArgumentLines(value) {
     if (Array.isArray(value))
         return value.map(cleanLauncherText).filter(Boolean);
