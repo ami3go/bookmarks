@@ -8,6 +8,7 @@ import {
     formatArgumentLines,
     parseArgumentLines,
     probeAddress,
+    resolveExecutablePath,
 } from '../src/launcher-runtime.js';
 
 test('normalizes shared launcher identifiers and argument lines', () => {
@@ -43,4 +44,30 @@ test('builds consistent transient systemd command prefixes', () => {
         '/usr/bin/example',
         '--flag',
     ]);
+});
+
+
+test('resolves executable paths with whereis and falls back safely', async () => {
+    const calls = [];
+    const cockpit = {
+        spawn: async args => {
+            calls.push(args);
+            return 'aoe: /usr/local/bin/aoe /usr/bin/aoe\n';
+        },
+    };
+
+    assert.equal(await resolveExecutablePath(cockpit, 'aoe'), '/usr/local/bin/aoe');
+    assert.deepEqual(calls, [['whereis', '-b', 'aoe']]);
+    assert.equal(await resolveExecutablePath(cockpit, '/opt/aoe/bin/aoe'), '/opt/aoe/bin/aoe');
+    assert.equal(await resolveExecutablePath(null, 'aoe'), 'aoe');
+
+    const missing = {
+        spawn: async () => 'missing:\n',
+    };
+    assert.equal(await resolveExecutablePath(missing, 'missing'), 'missing');
+
+    const failed = {
+        spawn: async () => { throw new Error('whereis unavailable'); },
+    };
+    assert.equal(await resolveExecutablePath(failed, 'aoe'), 'aoe');
 });
