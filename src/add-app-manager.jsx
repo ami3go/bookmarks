@@ -12,6 +12,7 @@ import {
     createAddAppDraft,
     isTerminalAddAppType,
     normalizeAddAppType,
+    resolveApplicationCommandPaths,
 } from './add-app.js';
 import {
     buildApplicationService,
@@ -89,7 +90,14 @@ export function AddAppManager({ isOpen = false, onClose, onSaved }) {
                 return;
             }
 
-            setDraft(createAddAppDraft(type, port));
+            let preparedDraft = createAddAppDraft(type, port);
+            if (!terminal)
+                preparedDraft = await resolveApplicationCommandPaths(window.cockpit, preparedDraft);
+
+            if (sequence !== allocationSequence.current)
+                return;
+
+            setDraft(preparedDraft);
         } catch (error) {
             if (sequence === allocationSequence.current)
                 setNotice(`Could not prepare ${addAppTypeLabel(type)} defaults: ${messageFor(error)}`);
