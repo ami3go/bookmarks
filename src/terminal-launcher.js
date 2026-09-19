@@ -5,7 +5,9 @@ import {
     cleanLauncherText,
     formatArgumentLines,
     parseArgumentLines,
+    prepareLauncherOutput,
     probeAddress,
+    readLauncherOutput,
     sleep,
     stopUserUnit,
     tcpPortListening,
@@ -185,8 +187,12 @@ export function buildLauncherService(draft, original = null) {
     return service;
 }
 
+export function stripLauncherHostBrackets(value) {
+    return String(value || '').trim().replace(/^\[|\]$/g, '');
+}
+
 export function expandLauncherHost(value, hostname) {
-    return String(value || '').replaceAll('{host}', String(hostname || ''));
+    return String(value || '').replaceAll('{host}', stripLauncherHostBrackets(hostname));
 }
 
 export function isNetworkExposedAddress(value) {
@@ -195,6 +201,32 @@ export function isNetworkExposedAddress(value) {
 }
 
 export { probeAddress };
+
+function addressLooksLikeIp(value) {
+    const address = stripLauncherHostBrackets(value).split('%')[0];
+    if (address.includes(':'))
+        return /^[0-9a-f:.]+$/i.test(address);
+    return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(address);
+}
+
+export async function resolveTtydBindAddress(cockpit, value) {
+    const address = stripLauncherHostBrackets(value);
+    if (!address || address === '0.0.0.0' || address === '::' || addressLooksLikeIp(address))
+        return address;
+
+    try {
+        const output = await cockpit.spawn(['getent', 'ahosts', address], { err: 'ignore' });
+        const resolved = String(output || '').trim().split(/\r?\n/)
+            .map(line => line.trim().split(/\s+/)[0])
+            .find(candidate => candidate && addressLooksLikeIp(candidate));
+        if (resolved)
+            return stripLauncherHostBrackets(resolved);
+    } catch (_) {
+        // Fall through to the actionable message below.
+    }
+
+    throw new Error(`ttyd cannot bind hostname "${address}". Use an IP address or 127.0.0.1, or make sure getent can resolve the hostname.`);
+}
 
 function providerArguments(launcher, service, hostname) {
     const address = expandLauncherHost(launcher.address, hostname);
@@ -225,7 +257,7 @@ function providerArguments(launcher, service, hostname) {
     ];
 }
 
-export function buildSystemdRunArguments(service, hostname = '') {
+export function buildSystemdRunArguments(service, hostname = '', outputFile = '') {
     const launcher = normalizeTerminalLauncher(service?.gottyLauncher);
     const command = expandLauncherHost(launcher.command, hostname);
     return buildTransientUnitArguments({
@@ -233,6 +265,7 @@ export function buildSystemdRunArguments(service, hostname = '') {
         runtimeSeconds: launcher.autoStopMinutes > 0 ? launcher.autoStopMinutes * 60 : 0,
         description: `Cockpit Bookmarks ${terminalProviderLabel(launcher.provider)}: ${cleanLauncherText(service?.name) || command}`,
         command: providerArguments(launcher, service, hostname),
+        outputFile,
     });
 }
 
@@ -254,6 +287,21 @@ export async function stopTerminalLauncher(cockpit, service) {
 
 export const stopGoTTYLauncher = stopTerminalLauncher;
 
+async function runtimeTerminalService(cockpit, service, hostname) {
+    const launcher = normalizeTerminalLauncher(service.gottyLauncher);
+    const expandedAddress = expandLauncherHost(launcher.address, hostname);
+    const address = launcher.provider === TERMINAL_PROVIDER_TTYD
+        ? await resolveTtydBindAddress(cockpit, expandedAddress)
+        : stripLauncherHostBrackets(expandedAddress);
+    return {
+        ...service,
+        gottyLauncher: {
+            ...launcher,
+            address,
+        },
+    };
+}
+
 export async function startTerminalLauncher(cockpit, service, hostname = '') {
     if (!cockpit?.spawn)
         throw new Error('Cockpit command execution is unavailable.');
@@ -261,33 +309,38 @@ export async function startTerminalLauncher(cockpit, service, hostname = '') {
         throw new Error('This bookmark is not a terminal launcher.');
 
     const launcher = normalizeTerminalLauncher(service.gottyLauncher);
+    const expandedAddress = expandLauncherHost(launcher.address, hostname);
     const errors = validateLauncherDraft({
         name: service.name,
         provider: launcher.provider,
         binary: launcher.binary,
         command: expandLauncherHost(launcher.command, hostname),
         port: launcher.port,
-        address: expandLauncherHost(launcher.address, hostname),
+        address: stripLauncherHostBrackets(expandedAddress),
         autoStopMinutes: launcher.autoStopMinutes,
     });
     if (Object.keys(errors).length)
         throw new Error(Object.values(errors)[0]);
 
+    const runtimeService = await runtimeTerminalService(cockpit, service, hostname);
+    const runtimeLauncher = normalizeTerminalLauncher(runtimeService.gottyLauncher);
     const unit = launcherUnitName(service.id);
     if (await userUnitActive(cockpit, unit)) {
-        if (await waitForLauncher(cockpit, service, 8, 250, hostname))
+        if (await waitForLauncher(cockpit, runtimeService, 8, 250, hostname))
             return { reused: true };
-        await stopTerminalLauncher(cockpit, service);
+        await stopTerminalLauncher(cockpit, runtimeService);
     }
 
-    if (await tcpPortListening(cockpit, launcher.port))
-        throw new Error(`TCP port ${launcher.port} is already in use by another service.`);
+    if (await tcpPortListening(cockpit, runtimeLauncher.port))
+        throw new Error(`TCP port ${runtimeLauncher.port} is already in use by another service.`);
 
-    await cockpit.spawn(buildSystemdRunArguments(service, hostname), { err: 'message' });
-    if (!await waitForLauncher(cockpit, service, undefined, undefined, hostname)) {
-        await stopTerminalLauncher(cockpit, service).catch(() => {});
-        const provider = terminalProviderLabel(launcher.provider);
-        throw new Error(`${provider} did not start listening on TCP port ${launcher.port}. Check that systemd user services, ${launcher.binary}, and ${launcher.command} are available.`);
+    const outputFile = await prepareLauncherOutput(cockpit, unit);
+    await cockpit.spawn(buildSystemdRunArguments(runtimeService, hostname, outputFile), { err: 'message' });
+    if (!await waitForLauncher(cockpit, runtimeService, undefined, undefined, hostname)) {
+        const logs = String(await readLauncherOutput(cockpit, unit) || '').trim().split(/\r?\n/).slice(-4).join(' | ');
+        await stopTerminalLauncher(cockpit, runtimeService).catch(() => {});
+        const provider = terminalProviderLabel(runtimeLauncher.provider);
+        throw new Error(`${provider} did not start listening on TCP port ${runtimeLauncher.port}.${logs ? ` Output: ${logs}` : ` Check that systemd user services, ${runtimeLauncher.binary}, and ${runtimeLauncher.command} are available.`}`);
     }
 
     return { reused: false };
