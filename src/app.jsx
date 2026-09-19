@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 import { Page } from '@patternfly/react-core/dist/esm/components/Page/index.js';
@@ -10,15 +10,60 @@ import { BookmarkSections } from './bookmark-sections.jsx';
 import { DashboardHeader } from './dashboard-header.jsx';
 import { EditToolbar } from './edit-toolbar.jsx';
 import { LauncherEditorDialog } from './launcher-editor-dialog.jsx';
+import { LauncherOutputDialog } from './launcher-output-dialog.jsx';
 import { ManagementDialogs } from './management-dialogs.jsx';
+import { readServiceOutput, restartService, stopService } from './service-runtime.js';
 import { useBookmarkManagement } from './use-bookmark-management.js';
 import { useDashboardView } from './use-dashboard-view.js';
 
+function runtimeError(error) {
+    try {
+        return window.cockpit?.message ? window.cockpit.message(error) : String(error?.message || error || 'Unknown error');
+    } catch (_) {
+        return String(error?.message || error || 'Unknown error');
+    }
+}
+
 export const Application = () => {
-    const { config, configError, configMissing } = useConfiguration();
+    const { config, configError, configMissing, loaded } = useConfiguration();
     const canEdit = useAdminPermission();
-    const view = useDashboardView(config);
+    const view = useDashboardView(config, loaded);
     const management = useBookmarkManagement({ config, configError, configMissing, canEdit, view });
+    const [outputTarget, setOutputTarget] = useState(null);
+    const [outputText, setOutputText] = useState('');
+    const [outputLoading, setOutputLoading] = useState(false);
+
+    const stopLauncher = async service => {
+        try {
+            await stopService(service);
+            management.setNotice({ variant: 'success', text: `${service.name || 'Launcher'} stopped.` });
+        } catch (error) {
+            management.setNotice({ variant: 'danger', text: `Could not stop ${service.name || 'launcher'}: ${runtimeError(error)}` });
+        }
+    };
+
+    const restartLauncher = async service => {
+        try {
+            await restartService(service);
+            management.setNotice({ variant: 'success', text: `${service.name || 'Launcher'} restarted.` });
+        } catch (error) {
+            management.setNotice({ variant: 'danger', text: `Could not restart ${service.name || 'launcher'}: ${runtimeError(error)}` });
+        }
+    };
+
+    const loadOutput = async service => {
+        if (!service)
+            return;
+        setOutputTarget(service);
+        setOutputLoading(true);
+        try {
+            setOutputText(await readServiceOutput(service));
+        } catch (error) {
+            setOutputText(`Could not read launcher output: ${runtimeError(error)}`);
+        } finally {
+            setOutputLoading(false);
+        }
+    };
 
     return (
         <Page className="pf-m-no-sidebar">
@@ -67,7 +112,9 @@ export const Application = () => {
                     <Alert isInline variant={management.notice.variant} title={management.notice.text} className="bookmarks-notice" />
                 )}
 
-                {config.services.length === 0 ? (
+                {!loaded ? (
+                    <div className="bookmarks-empty" role="status">Loading configuration…</div>
+                ) : config.services.length === 0 ? (
                     <div className="bookmarks-empty bookmarks-empty-first-run">
                         <h2>Add your first service</h2>
                         <p>
@@ -99,6 +146,9 @@ export const Application = () => {
                         onMoveGroupWithinOrder={management.moveGroupWithinOrder}
                         onSelectService={management.selectService}
                         onOpenService={management.openService}
+                        onStopLauncher={stopLauncher}
+                        onRestartLauncher={restartLauncher}
+                        onViewOutput={loadOutput}
                         onSetSelectedBookmark={management.setSelectedBookmark}
                         onSetDragSource={view.setDragSource}
                         onReorderBetween={management.reorderBetween}
@@ -166,6 +216,17 @@ export const Application = () => {
                 onSaved={service => {
                     management.setSelectedBookmark(null);
                     management.setNotice({ variant: 'success', text: `${service.name} updated.` });
+                }}
+            />
+
+            <LauncherOutputDialog
+                target={outputTarget}
+                output={outputText}
+                loading={outputLoading}
+                onRefresh={() => loadOutput(outputTarget)}
+                onClose={() => {
+                    setOutputTarget(null);
+                    setOutputText('');
                 }}
             />
         </Page>
