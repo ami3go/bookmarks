@@ -1,3 +1,4 @@
+import './secure-random-uuid.js';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 
