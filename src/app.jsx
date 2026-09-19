@@ -15,6 +15,7 @@ import { ManagementDialogs } from './management-dialogs.jsx';
 import { readServiceOutput, restartService, stopService } from './service-runtime.js';
 import { useBookmarkManagement } from './use-bookmark-management.js';
 import { useDashboardView } from './use-dashboard-view.js';
+import { usePageSettings } from './use-page-settings.js';
 
 function runtimeError(error) {
     try {
@@ -27,8 +28,10 @@ function runtimeError(error) {
 export const Application = () => {
     const { config, configError, configMissing, loaded } = useConfiguration();
     const canEdit = useAdminPermission();
-    const view = useDashboardView(config, loaded);
-    const management = useBookmarkManagement({ config, configError, configMissing, canEdit, view });
+    const pageSettings = usePageSettings(config);
+    const displayConfig = pageSettings.previewConfig;
+    const view = useDashboardView(displayConfig, loaded, pageSettings.open);
+    const management = useBookmarkManagement({ config, configError, configMissing, canEdit, view, pageSettings });
     const [outputTarget, setOutputTarget] = useState(null);
     const [outputText, setOutputText] = useState('');
     const [outputLoading, setOutputLoading] = useState(false);
@@ -69,8 +72,9 @@ export const Application = () => {
         <Page className="pf-m-no-sidebar">
             <main className="bookmarks-page">
                 <DashboardHeader
-                    config={config}
+                    config={displayConfig}
                     editMode={management.editMode}
+                    previewSettings={pageSettings.open}
                     canEdit={canEdit}
                     saving={management.saving}
                     query={view.query}
@@ -100,17 +104,9 @@ export const Application = () => {
                     onDiscoveryOpenChange={management.setDiscoveryOpen}
                 />
 
-                <input
-                    ref={management.fileInputRef}
-                    className="bookmarks-file-input"
-                    type="file"
-                    accept="application/json,.json"
-                    onChange={management.handleImportFile}
-                />
+                <input ref={management.fileInputRef} className="bookmarks-file-input" type="file" accept="application/json,.json" onChange={management.handleImportFile} />
 
-                {management.notice && (
-                    <Alert isInline variant={management.notice.variant} title={management.notice.text} className="bookmarks-notice" />
-                )}
+                {management.notice && <Alert isInline variant={management.notice.variant} title={management.notice.text} className="bookmarks-notice" />}
 
                 {!loaded ? (
                     <div className="bookmarks-empty" role="status">Loading configuration…</div>
@@ -133,7 +129,7 @@ export const Application = () => {
                     <BookmarkSections
                         sections={view.sections}
                         collapsedGroups={view.collapsedGroups}
-                        query={view.query}
+                        query={view.filterQuery}
                         editMode={management.editMode}
                         canEdit={canEdit}
                         groups={view.groups}
@@ -161,9 +157,7 @@ export const Application = () => {
                     />
                 )}
 
-                <footer className="bookmarks-footer">
-                    Configuration: <code>{CONFIG_PATH}</code>
-                </footer>
+                <footer className="bookmarks-footer">Configuration: <code>{CONFIG_PATH}</code></footer>
             </main>
 
             <ManagementDialogs
@@ -187,6 +181,7 @@ export const Application = () => {
                 editMode={management.editMode}
                 deleteTarget={management.deleteTarget}
                 setDeleteTarget={management.setDeleteTarget}
+                deleteStopFailed={management.deleteStopFailed}
                 deleteBookmark={management.deleteBookmark}
                 settingsOpen={management.settingsOpen}
                 setSettingsOpen={management.setSettingsOpen}
@@ -204,11 +199,7 @@ export const Application = () => {
                 restoreHistory={management.restoreHistory}
             />
 
-            <AddAppManager
-                isOpen={management.addAppOpen}
-                onClose={() => management.setAddAppOpen(false)}
-                onSaved={service => management.setNotice({ variant: 'success', text: `${service.name} added.` })}
-            />
+            <AddAppManager isOpen={management.addAppOpen} onClose={() => management.setAddAppOpen(false)} onSaved={service => management.setNotice({ variant: 'success', text: `${service.name} added.` })} />
 
             <LauncherEditorDialog
                 service={management.launcherEditorService}
