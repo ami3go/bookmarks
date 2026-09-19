@@ -46,28 +46,58 @@ test('builds consistent transient systemd command prefixes', () => {
     ]);
 });
 
+test('adds per-run output capture only when requested', () => {
+    const args = buildTransientUnitArguments({
+        unit: 'example.service',
+        runtimeSeconds: 0,
+        description: 'Example',
+        command: ['/usr/bin/example'],
+        outputFile: '/run/user/1000/cockpit-bookmarks/example.log',
+    });
+    assert.ok(args.includes('--property=StandardOutput=file:/run/user/1000/cockpit-bookmarks/example.log'));
+    assert.ok(args.includes('--property=StandardError=inherit'));
+    assert.equal(args.some(arg => arg.startsWith('--property=RuntimeMaxSec=')), false);
+});
 
-test('resolves executable paths with whereis and falls back safely', async () => {
+test('resolves bare executables through command -v in Cockpit PATH', async () => {
     const calls = [];
     const cockpit = {
-        spawn: async args => {
-            calls.push(args);
-            return 'aoe: /usr/local/bin/aoe /usr/bin/aoe\n';
+        spawn: async (args, options) => {
+            calls.push({ args, options });
+            assert.equal(args[0], 'bash');
+            assert.ok(args.includes('aoe'));
+            return '/usr/local/bin/aoe\n';
         },
     };
 
     assert.equal(await resolveExecutablePath(cockpit, 'aoe'), '/usr/local/bin/aoe');
-    assert.deepEqual(calls, [['whereis', '-b', 'aoe']]);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].args[4], /command -v/);
+});
+
+test('leaves explicitly configured paths untouched', async () => {
+    let called = false;
+    const cockpit = { spawn: async () => { called = true; } };
     assert.equal(await resolveExecutablePath(cockpit, '/opt/aoe/bin/aoe'), '/opt/aoe/bin/aoe');
-    assert.equal(await resolveExecutablePath(null, 'aoe'), 'aoe');
+    assert.equal(called, false);
+});
 
-    const missing = {
-        spawn: async () => 'missing:\n',
+test('fails with the searched PATH when a bare executable is missing', async () => {
+    let calls = 0;
+    const cockpit = {
+        spawn: async args => {
+            calls += 1;
+            return calls === 1 ? '' : '/usr/local/bin:/usr/bin:/bin';
+        },
     };
-    assert.equal(await resolveExecutablePath(missing, 'missing'), 'missing');
 
-    const failed = {
-        spawn: async () => { throw new Error('whereis unavailable'); },
-    };
-    assert.equal(await resolveExecutablePath(failed, 'aoe'), 'aoe');
+    await assert.rejects(
+        resolveExecutablePath(cockpit, 'missing-app'),
+        /Executable "missing-app" was not found in PATH \/usr\/local\/bin:\/usr\/bin:\/bin/
+    );
+    assert.equal(calls, 2);
+});
+
+test('fails clearly when Cockpit command execution is unavailable', async () => {
+    await assert.rejects(resolveExecutablePath(null, 'aoe'), /Cockpit command execution is unavailable/);
 });
