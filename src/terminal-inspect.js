@@ -9,7 +9,7 @@ case "$pid" in
     ''|*[!0-9]*) exit 2 ;;
 esac
 [ "$pid" -gt 0 ] || exit 2
-cmdline="/proc/$pid/cmdline"
+cmdline="${3:-/proc/$pid/cmdline}"
 [ -r "$cmdline" ] || exit 1
 
 tls=0
