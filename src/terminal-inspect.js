@@ -1,7 +1,7 @@
 import { gottyListenerPids } from './discovery.js';
 import { ttydListenerPids } from './ttyd-discovery.js';
 
-export const TERMINAL_INSPECTION_SCRIPT = String.raw`
+export const TERMINAL_INSPECTION_SCRIPT = `
 set -eu
 provider="$1"
 pid="$2"
@@ -9,7 +9,7 @@ case "$pid" in
     ''|*[!0-9]*) exit 2 ;;
 esac
 [ "$pid" -gt 0 ] || exit 2
-cmdline="${3:-/proc/$pid/cmdline}"
+cmdline="\${3:-/proc/$pid/cmdline}"
 [ -r "$cmdline" ] || exit 1
 
 tls=0
@@ -22,9 +22,9 @@ path=/
 
 normalize_path() {
     value="$1"
-    value="$(printf '%s' "$value" | tr -d '\r\n')"
-    value="${value#/}"
-    value="${value%/}"
+    value="$(printf '%s' "$value" | tr -d '\\r\\n')"
+    value="\${value#/}"
+    value="\${value%/}"
     if [ -n "$value" ]; then
         printf '/%s/' "$value"
     else
@@ -36,12 +36,12 @@ normalize_path() {
 # argv element separate and nothing is printed until sensitive values have
 # been reduced to facts.
 mapfile -d '' -t argv < "$cmdline"
-[ "${#argv[@]}" -gt 0 ] || exit 1
+[ "\${#argv[@]}" -gt 0 ] || exit 1
 
 if [ "$provider" = gotty ]; then
     i=1
-    while [ "$i" -lt "${#argv[@]}" ]; do
-        arg="${argv[$i]}"
+    while [ "$i" -lt "\${#argv[@]}" ]; do
+        arg="\${argv[$i]}"
         case "$arg" in
             --) break ;;
             --tls|-tls|-t) tls=1 ;;
@@ -54,10 +54,10 @@ if [ "$provider" = gotty ]; then
             --credential=*|-credential=*|-c=*|-c?*) auth=1 ;;
             --path|-path|-m)
                 i=$((i + 1))
-                [ "$i" -lt "${#argv[@]}" ] && path="$(normalize_path "${argv[$i]}")"
+                [ "$i" -lt "\${#argv[@]}" ] && path="$(normalize_path "\${argv[$i]}")"
                 ;;
             --path=*|-path=*|-m=*)
-                path="$(normalize_path "${arg#*=}")"
+                path="$(normalize_path "\${arg#*=}")"
                 ;;
             --address|-address|-a|--port|-port|-p|--random-url-length|-random-url-length|--tls-crt|-tls-crt|--tls-key|-tls-key|--tls-ca-crt|-tls-ca-crt|--index|-index|--title-format|-title-format|--reconnect-time|-reconnect-time|--max-connection|-max-connection|--timeout|-timeout|--width|-width|--height|-height|--ws-origin|-ws-origin|--ws-query-args|-ws-query-args|--close-signal|-close-signal|--close-timeout|-close-timeout|--config|-config)
                 i=$((i + 1))
@@ -70,8 +70,8 @@ if [ "$provider" = gotty ]; then
     done
 elif [ "$provider" = ttyd ]; then
     i=1
-    while [ "$i" -lt "${#argv[@]}" ]; do
-        arg="${argv[$i]}"
+    while [ "$i" -lt "\${#argv[@]}" ]; do
+        arg="\${argv[$i]}"
         case "$arg" in
             --) break ;;
             --ssl) tls=1 ;;
@@ -89,9 +89,9 @@ elif [ "$provider" = ttyd ]; then
             --auth-header=*) auth=1 ;;
             --base-path)
                 i=$((i + 1))
-                [ "$i" -lt "${#argv[@]}" ] && path="$(normalize_path "${argv[$i]}")"
+                [ "$i" -lt "\${#argv[@]}" ] && path="$(normalize_path "\${argv[$i]}")"
                 ;;
-            --base-path=*) path="$(normalize_path "${arg#*=}")" ;;
+            --base-path=*) path="$(normalize_path "\${arg#*=}")" ;;
             --port|--interface|--uid|--gid|--signal|--cwd|--terminal-type|--client-option|--ping-interval|--ssl-cert|--ssl-key|--ssl-ca|--max-clients|--debug|--url-arg|--ipv6|--font)
                 i=$((i + 1))
                 ;;
@@ -99,10 +99,10 @@ elif [ "$provider" = ttyd ]; then
             --browser|--once|--exit-no-conn|--ipv6-only) ;;
             --*) unknown=1 ;;
             -*)
-                short="${arg#-}"
+                short="\${arg#-}"
                 while [ -n "$short" ]; do
-                    opt="${short%${short#?}}"
-                    short="${short#?}"
+                    opt="\${short%\${short#?}}"
+                    short="\${short#?}"
                     case "$opt" in
                         S) tls=1 ;;
                         W) write=1 ;;
@@ -118,7 +118,7 @@ elif [ "$provider" = ttyd ]; then
                                 path="$(normalize_path "$short")"
                             else
                                 i=$((i + 1))
-                                [ "$i" -lt "${#argv[@]}" ] && path="$(normalize_path "${argv[$i]}")"
+                                [ "$i" -lt "\${#argv[@]}" ] && path="$(normalize_path "\${argv[$i]}")"
                             fi
                             short=''
                             ;;
@@ -143,14 +143,14 @@ else
     exit 2
 fi
 
-printf 'inspected=1\n'
-printf 'tls=%s\n' "$tls"
-printf 'permitWrite=%s\n' "$write"
-printf 'authentication=%s\n' "$auth"
-printf 'randomUrl=%s\n' "$random"
-printf 'readonly=%s\n' "$readonly"
-printf 'unknown=%s\n' "$unknown"
-printf 'path=%s\n' "$path"
+printf 'inspected=1\\n'
+printf 'tls=%s\\n' "$tls"
+printf 'permitWrite=%s\\n' "$write"
+printf 'authentication=%s\\n' "$auth"
+printf 'randomUrl=%s\\n' "$random"
+printf 'readonly=%s\\n' "$readonly"
+printf 'unknown=%s\\n' "$unknown"
+printf 'path=%s\\n' "$path"
 `;
 
 export function parseTerminalInspectionFacts(output) {
