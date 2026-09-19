@@ -9,6 +9,7 @@ import {
 import { CURRENT_CONFIG_SCHEMA_VERSION, migrateConfiguration } from './config-migrations.js';
 
 export const MAX_CONFIG_READ_SIZE = MAX_CONFIG_SIZE * 4;
+export const OVERSIZE_REPAIR_READ_SIZE = MAX_CONFIG_SIZE * 32;
 export const CONFIG_WRITE_RETRIES = 5;
 
 export function emptyConfiguration() {
@@ -127,6 +128,36 @@ export async function readConfiguration() {
 
     try {
         return configurationFromContent(await file.read());
+    } finally {
+        file.close();
+    }
+}
+
+export async function repairOversizedConfigurationHistory() {
+    const file = window.cockpit.file(CONFIG_PATH, {
+        syntax: CONFIG_SYNTAX,
+        max_read_size: OVERSIZE_REPAIR_READ_SIZE,
+        superuser: 'require',
+    });
+
+    try {
+        const { content, tag } = await readWithTag(file);
+        if (content === null)
+            throw new Error('No configuration file exists to repair.');
+        const current = configurationFromContent(content);
+        const previousHistoryCount = current.history.length;
+        const repaired = {
+            ...current,
+            schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+            history: [],
+        };
+        const fitted = fitConfigurationForWrite(repaired);
+        await replaceWithTag(file, fitted.config, tag);
+        return {
+            config: configurationFromContent(fitted.config),
+            removedHistoryEntries: previousHistoryCount,
+            size: fitted.size,
+        };
     } finally {
         file.close();
     }
