@@ -15,6 +15,7 @@ function PencilIcon() {
 export function DashboardHeader({
     config,
     editMode,
+    previewSettings = false,
     canEdit,
     saving,
     query,
@@ -26,7 +27,7 @@ export function DashboardHeader({
     onAddApp,
     onToggleEditMode,
 }) {
-    const headerTextVisible = config.showHeader || editMode;
+    const headerTextVisible = config.showHeader || (editMode && !previewSettings);
     const titleVisible = config.showTitle;
     const headingVisible = headerTextVisible || titleVisible;
     const groupOptions = [
@@ -58,19 +59,10 @@ export function DashboardHeader({
                     </div>
                 )}
                 <div className="bookmarks-group-filter">
-                    <SelectControl
-                        value={groupFilter}
-                        ariaLabel="Filter by group"
-                        onChange={setGroupFilter}
-                        options={groupOptions}
-                    />
+                    <SelectControl value={groupFilter} ariaLabel="Filter by group" onChange={setGroupFilter} options={groupOptions} />
                 </div>
-                <Button variant="primary" onClick={onAddBookmark} isDisabled={canEdit !== true}>
-                    Add bookmark
-                </Button>
-                <Button variant="secondary" onClick={onAddApp} isDisabled={canEdit !== true}>
-                    Add app
-                </Button>
+                <Button variant="primary" onClick={onAddBookmark} isDisabled={canEdit !== true}>Add bookmark</Button>
+                <Button variant="secondary" onClick={onAddApp} isDisabled={canEdit !== true}>Add app</Button>
                 <Button
                     variant={editMode ? 'secondary' : 'plain'}
                     className="bookmark-edit-mode-toggle"
