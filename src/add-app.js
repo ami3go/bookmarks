@@ -10,11 +10,17 @@ export const APP_TYPE_CUSTOM = 'custom';
 export const APP_TYPE_GOTTY = 'gotty';
 export const APP_TYPE_TTYD = 'ttyd';
 export const APP_TYPE_AGENT_OF_EMPIRES = 'agent-of-empires';
+export const APP_TYPE_MC = 'mc';
+export const APP_TYPE_BTOP = 'btop';
+export const APP_TYPE_FISH = 'fish';
 
 export const ADD_APP_TYPES = [
     { value: APP_TYPE_CUSTOM, label: 'Custom' },
     { value: APP_TYPE_GOTTY, label: 'GoTTY' },
     { value: APP_TYPE_TTYD, label: 'ttyd' },
+    { value: APP_TYPE_MC, label: 'MC terminal' },
+    { value: APP_TYPE_BTOP, label: 'btop terminal' },
+    { value: APP_TYPE_FISH, label: 'Fish terminal' },
     { value: APP_TYPE_AGENT_OF_EMPIRES, label: 'Agent of Empires' },
 ];
 
@@ -30,7 +36,17 @@ export function addAppTypeLabel(value) {
 
 export function isTerminalAddAppType(value) {
     const type = normalizeAddAppType(value);
-    return type === APP_TYPE_GOTTY || type === APP_TYPE_TTYD;
+    return [APP_TYPE_GOTTY, APP_TYPE_TTYD, APP_TYPE_MC, APP_TYPE_BTOP, APP_TYPE_FISH].includes(type);
+}
+
+function terminalPreset(type) {
+    if (type === APP_TYPE_MC)
+        return { name: 'MC', command: 'mc', icon: '📁' };
+    if (type === APP_TYPE_BTOP)
+        return { name: 'btop', command: 'btop', icon: '📊' };
+    if (type === APP_TYPE_FISH)
+        return { name: 'Fish', command: 'fish', icon: '🐟' };
+    return null;
 }
 
 export function createAddAppDraft(value, port) {
@@ -39,17 +55,18 @@ export function createAddAppDraft(value, port) {
     if (type === APP_TYPE_AGENT_OF_EMPIRES)
         return agentOfEmpiresDraft(port);
 
-    if (type === APP_TYPE_GOTTY || type === APP_TYPE_TTYD) {
+    if (isTerminalAddAppType(type)) {
         const provider = type === APP_TYPE_TTYD ? TERMINAL_PROVIDER_TTYD : TERMINAL_PROVIDER_GOTTY;
+        const preset = terminalPreset(type);
         return {
             ...launcherDraft(null, port),
-            name: type === APP_TYPE_TTYD ? 'ttyd Terminal' : 'GoTTY Terminal',
+            name: preset?.name || (type === APP_TYPE_TTYD ? 'ttyd Terminal' : 'GoTTY Terminal'),
             provider,
             binary: defaultBinaryForProvider(provider),
-            command: 'bash',
+            command: preset?.command || 'bash',
             address: '{host}',
             group: 'Applications',
-            icon: '⌨️',
+            icon: preset?.icon || '⌨️',
             accent: 'teal',
         };
     }
