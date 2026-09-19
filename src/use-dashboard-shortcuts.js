@@ -53,22 +53,32 @@ export function useDashboardKeyboard({ query, setQuery, showSearch, managementOp
             if (isTyping || !['ArrowDown', 'ArrowRight', 'ArrowUp', 'ArrowLeft'].includes(event.key))
                 return;
 
-            const cards = [...document.querySelectorAll('.bookmark-card')]
-                .filter(card => card instanceof HTMLElement && card.offsetParent !== null);
-            if (cards.length === 0)
+            const active = document.activeElement;
+            const grid = active?.closest?.('.bookmarks-grid');
+            if (!grid)
                 return;
 
-            const active = document.activeElement;
-            const activeIndex = cards.indexOf(active);
+            const cards = [...grid.querySelectorAll('.bookmark-card')]
+                .filter(card => card instanceof HTMLElement && card.offsetParent !== null);
+            if (!cards.length)
+                return;
+
+            const activeCard = active?.closest?.('.bookmark-card');
+            const activeIndex = cards.indexOf(activeCard);
+            if (activeIndex === -1)
+                return;
+
             const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight';
-            if (activeIndex === -1 && active !== document.body && !active?.matches?.('.bookmarks-page'))
+            const nextIndex = (activeIndex + (forward ? 1 : -1) + cards.length) % cards.length;
+            const nextCard = cards[nextIndex];
+            const target = nextCard.matches('[tabindex]')
+                ? nextCard
+                : nextCard.querySelector('.bookmark-card-primary-link, .bookmark-launcher-primary');
+            if (!target)
                 return;
 
             event.preventDefault();
-            const nextIndex = activeIndex === -1
-                ? (forward ? 0 : cards.length - 1)
-                : (activeIndex + (forward ? 1 : -1) + cards.length) % cards.length;
-            cards[nextIndex].focus();
+            target.focus();
         };
 
         document.addEventListener('keydown', handleKeyboard);
