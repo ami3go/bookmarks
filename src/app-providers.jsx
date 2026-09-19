@@ -10,6 +10,7 @@ export function AppProviders({ children }) {
     const [config, setConfig] = useState(DEFAULT_CONFIG);
     const [configError, setConfigError] = useState(null);
     const [configMissing, setConfigMissing] = useState(false);
+    const [loaded, setLoaded] = useState(false);
     const [canEdit, setCanEdit] = useState(null);
 
     useEffect(() => watchConfiguration(
@@ -17,9 +18,16 @@ export function AppProviders({ children }) {
             setConfig(value);
             setConfigError(null);
             setConfigMissing(false);
+            setLoaded(true);
         },
-        error => setConfigError(error),
-        () => setConfigMissing(true)
+        error => {
+            setConfigError(error);
+            setLoaded(true);
+        },
+        () => {
+            setConfigMissing(true);
+            setLoaded(true);
+        }
     ), []);
 
     useEffect(() => {
@@ -37,8 +45,9 @@ export function AppProviders({ children }) {
         config,
         configError,
         configMissing,
+        loaded,
         configPath: CONFIG_PATH,
-    }), [config, configError, configMissing]);
+    }), [config, configError, configMissing, loaded]);
 
     return (
         <PermissionContext.Provider value={canEdit}>
