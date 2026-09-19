@@ -12,7 +12,7 @@ import {
     loadCollapsedGroups,
 } from './bookmark-ui.js';
 
-export function useDashboardView(config) {
+export function useDashboardView(config, loaded = true) {
     const [query, setQuery] = useState('');
     const [groupFilter, setGroupFilter] = useState('all');
     const [dragSource, setDragSource] = useState(null);
@@ -39,6 +39,8 @@ export function useDashboardView(config) {
     }, [groupFilter, groups]);
 
     useEffect(() => {
+        if (!loaded)
+            return;
         setCollapsedGroups(current => {
             const available = new Set([
                 ...(hasFavorites ? [FAVORITES_SECTION_KEY] : []),
@@ -49,15 +51,17 @@ export function useDashboardView(config) {
                 return current;
             return next;
         });
-    }, [groups, hasFavorites]);
+    }, [groups, hasFavorites, loaded]);
 
     useEffect(() => {
+        if (!loaded)
+            return;
         try {
             window.localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...collapsedGroups]));
         } catch (_) {
             // Local storage is an optional convenience; the dashboard still works without it.
         }
-    }, [collapsedGroups]);
+    }, [collapsedGroups, loaded]);
 
     const services = useMemo(() => {
         const needle = query.trim().toLowerCase();
