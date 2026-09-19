@@ -1,12 +1,5 @@
 const TTYD_PROCESS_HINT = /(^|[^a-z0-9])ttyd([^a-z0-9]|$)/i;
 
-const TTYD_VALUE_OPTIONS = new Set([
-    '--port', '-p', '--interface', '-i', '--credential', '-c', '--auth-header', '-H',
-    '--uid', '-u', '--gid', '-g', '--signal', '-s', '--cwd', '-w', '--terminal-type', '-T',
-    '--client-option', '-t', '--browser', '-B', '--base-path', '-b', '--ping-interval', '-P',
-    '--ssl-cert', '-C', '--ssl-key', '-K', '--ssl-ca', '-A', '--max-clients', '-m',
-]);
-
 function processNames(line) {
     const result = [];
     for (const match of String(line || '').matchAll(/"([^"]+)",pid=/g)) {
@@ -56,16 +49,6 @@ export function ttydListenerPids(output) {
     return Object.fromEntries([...result].map(([port, pids]) => [port, [...pids]]));
 }
 
-function commandLineArguments(commandLine) {
-    const value = String(commandLine || '');
-    if (!value)
-        return [];
-    if (value.includes('\0'))
-        return value.split('\0').map(argument => argument.trim()).filter(Boolean);
-    return (value.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [])
-        .map(argument => argument.replace(/^(?:"(.*)"|'(.*)')$/, (_match, doubleQuoted, singleQuoted) => doubleQuoted ?? singleQuoted ?? ''));
-}
-
 function normalizePath(value) {
     const raw = String(value || '/').trim();
     if (!raw || raw === '/')
@@ -73,85 +56,27 @@ function normalizePath(value) {
     return `/${raw.replace(/^\/+|\/+$/g, '')}/`;
 }
 
-export function parseTtydCommandLine(commandLine) {
-    const args = commandLineArguments(commandLine);
-    const result = {
-        inspected: true,
-        tls: false,
-        permitWrite: false,
-        authentication: false,
-        path: '/',
-    };
-
-    for (let index = 1; index < args.length; index += 1) {
-        const argument = args[index];
-        if (argument === '--')
-            break;
-        if (!argument.startsWith('-'))
-            break;
-
-        if (argument === '--ssl' || argument === '-S') {
-            result.tls = true;
-            continue;
-        }
-        if (argument === '--writable' || argument === '-W') {
-            result.permitWrite = true;
-            continue;
-        }
-        if (argument.startsWith('--base-path=')) {
-            result.path = normalizePath(argument.slice('--base-path='.length));
-            continue;
-        }
-        if (argument.startsWith('-b=')) {
-            result.path = normalizePath(argument.slice(3));
-            continue;
-        }
-        if (argument.startsWith('--credential=') || argument.startsWith('-c=')) {
-            result.authentication = true;
-            continue;
-        }
-        if (argument.startsWith('--auth-header=')) {
-            result.authentication = true;
-            continue;
-        }
-        if (argument === '--base-path' || argument === '-b') {
-            result.path = normalizePath(args[index + 1]);
-            index += 1;
-            continue;
-        }
-        if (argument === '--credential' || argument === '-c' || argument === '--auth-header' || argument === '-H') {
-            result.authentication = true;
-            index += 1;
-            continue;
-        }
-
-        const equals = argument.indexOf('=');
-        const optionName = equals === -1 ? argument : argument.slice(0, equals);
-        if (TTYD_VALUE_OPTIONS.has(optionName) && equals === -1)
-            index += 1;
-    }
-    return result;
-}
-
-function normalizeCandidatePath(value) {
-    return normalizePath(value || '/');
-}
-
 function terminalBookmark(listener, info) {
-    const path = normalizeCandidatePath(info?.path);
+    const path = normalizePath(info?.path);
     const scheme = info?.tls ? 'https' : 'http';
     const url = `${scheme}://{host}:${listener.port}${path}`;
     const securityNotes = [];
-    if (info?.permitWrite)
+
+    if (info?.permitWrite) {
         securityNotes.push('Interactive input is enabled (--writable). Treat this terminal as privileged access.');
-    else if (info?.inspected)
-        securityNotes.push('ttyd is read-only because --writable is not enabled.');
+    } else if (info?.readonly) {
+        securityNotes.push('ttyd is explicitly read-only (--readonly).');
+    } else if (info?.inspected) {
+        securityNotes.push('No write flag was detected. ttyd 1.7+ is read-only by default; older releases may accept input unless started with --readonly.');
+    }
     if (info?.authentication)
-        securityNotes.push('Authentication is configured. Credential values are intentionally not read or stored.');
+        securityNotes.push('Authentication is configured. Credential values never leave the host inspection process.');
     if (info?.tls)
         securityNotes.push('TLS is enabled by the ttyd command line.');
+    if (info?.unknownOptions)
+        securityNotes.push('Unrecognized ttyd options were present; the inferred URL or security state may be approximate.');
     if (!info?.inspected)
-        securityNotes.push(info?.reason || 'ttyd command-line options could not be inspected; URL settings are approximate.');
+        securityNotes.push(info?.reason || 'ttyd options could not be inspected; URL settings are approximate.');
 
     return { path, scheme, url, securityNotes };
 }
@@ -177,7 +102,9 @@ export function applyTtydDiscoveryCandidates(candidates, ttydInfoByPort = {}) {
                 inspected: info?.inspected === true,
                 tls: info?.tls === true,
                 permitWrite: info?.permitWrite === true,
+                readonly: info?.readonly === true,
                 authentication: info?.authentication === true,
+                unknownOptions: info?.unknownOptions === true,
                 path: terminal.path,
             },
             bookmark: {
