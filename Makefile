@@ -5,6 +5,7 @@ CONFIG_FILE := $(CONFIG_DIR)/cockpit-bookmarks.json
 LEGACY_CONFIG_FILE := $(CONFIG_DIR)/local-services.json
 VERSION := $(shell sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' package.json | head -n 1)
 DEB_REVISION ?= 1
+NODE_ENV ?= production
 RELEASE_DIR := release
 RELEASE_NAME := $(PACKAGE_NAME)-$(VERSION)
 RELEASE_ARCHIVE := $(RELEASE_DIR)/$(RELEASE_NAME).tar.gz
@@ -12,7 +13,7 @@ RELEASE_DEB := $(RELEASE_DIR)/$(PACKAGE_NAME)_$(VERSION)-$(DEB_REVISION)_all.deb
 SRC_FILES := $(shell find src -type f -print)
 SRC_DIRS := $(shell find src -type d -print)
 
-.PHONY: all dist watch install install-prebuilt install-config devel-install devel-uninstall uninstall clean release deb deb-prebuilt release-all
+.PHONY: all dist dev watch install install-prebuilt install-config devel-install devel-uninstall uninstall clean release deb deb-prebuilt release-all
 
 all: dist
 
@@ -22,15 +23,20 @@ node_modules/.package-lock.json: package.json package-lock.json
 dist: node_modules/.package-lock.json build.js $(SRC_FILES) $(SRC_DIRS)
 	NODE_ENV=$(NODE_ENV) npm run build
 
+dev: node_modules/.package-lock.json
+	NODE_ENV=development npm run build
+
 watch: node_modules/.package-lock.json
-	npm run watch
+	NODE_ENV=development npm run watch
 
 install: dist
+	rm -rf "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
 	install -d "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
 	cp -r dist/* "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)/"
 
 install-prebuilt:
 	@test -s dist/index.html || { echo "Missing prebuilt dist/. Use 'make install' from a source checkout." >&2; exit 1; }
+	rm -rf "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
 	install -d "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)"
 	cp -r dist/* "$(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)/"
 
@@ -48,7 +54,7 @@ install-config:
 		echo "Keeping existing $(DESTDIR)$(CONFIG_FILE)"; \
 	fi
 
-devel-install: dist
+devel-install: dev
 	mkdir -p "$$HOME/.local/share/cockpit"
 	ln -sfn "$(CURDIR)/dist" "$$HOME/.local/share/cockpit/$(PACKAGE_NAME)"
 
