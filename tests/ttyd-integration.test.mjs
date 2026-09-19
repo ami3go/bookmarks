@@ -4,10 +4,9 @@ import assert from 'node:assert/strict';
 import { buildDiscoveryCandidates } from '../src/discovery.js';
 import {
     applyTtydDiscoveryCandidates,
-    parseTtydCommandLine,
     ttydListenerPids,
 } from '../src/ttyd-discovery.js';
-import { TTYD_REDACTION_SCRIPT, inspectTtydListenersSafely } from '../src/ttyd-inspect.js';
+import { inspectTerminalListenersSafely } from '../src/terminal-inspect.js';
 
 const LISTENER = {
     port: 7681,
@@ -23,28 +22,7 @@ test('extracts ttyd listener PIDs from ss output', () => {
     assert.deepEqual(ttydListenerPids(SOCKET_OUTPUT), { 7681: [444] });
 });
 
-test('parses ttyd TLS, writable, auth, and base path without credential values', () => {
-    const parsed = parseTtydCommandLine([
-        '/usr/bin/ttyd',
-        '--ssl',
-        '--writable',
-        '--base-path', '/terminal',
-        '--credential', 'alice:super-secret',
-        'bash',
-    ].join('\0'));
-
-    assert.deepEqual(parsed, {
-        inspected: true,
-        tls: true,
-        permitWrite: true,
-        authentication: true,
-        path: '/terminal/',
-    });
-    assert.equal(JSON.stringify(parsed).includes('super-secret'), false);
-    assert.equal(JSON.stringify(parsed).includes('alice'), false);
-});
-
-test('turns ttyd listeners into terminal-specific discovery candidates', () => {
+test('turns ttyd host facts into terminal-specific discovery candidates', () => {
     const base = buildDiscoveryCandidates([LISTENER], [], 'mini-pc.local');
     const [candidate] = applyTtydDiscoveryCandidates(base, {
         7681: {
@@ -52,6 +30,8 @@ test('turns ttyd listeners into terminal-specific discovery candidates', () => {
             tls: true,
             permitWrite: true,
             authentication: true,
+            readonly: false,
+            unknownOptions: false,
             path: '/terminal/',
         },
     });
@@ -64,41 +44,33 @@ test('turns ttyd listeners into terminal-specific discovery candidates', () => {
     assert.equal(candidate.bookmark.integration, 'ttyd');
     assert.ok(candidate.bookmark.tags.includes('ttyd'));
     assert.ok(candidate.securityNotes.some(note => note.includes('--writable')));
-    assert.ok(candidate.securityNotes.some(note => note.includes('Credential values')));
+    assert.ok(candidate.securityNotes.some(note => note.includes('Credential values never leave')));
 });
 
-test('ttyd safe inspection redacts credentials before parsing', async () => {
+test('browser receives only facts from host-side ttyd inspection', async () => {
     const calls = [];
     const cockpit = {
         spawn: async (argv, options) => {
             calls.push({ argv, options });
-            return [
-                '/usr/bin/ttyd',
-                '-S',
-                '-W',
-                '-b', '/console',
-                '-c', '<redacted>',
-                'bash',
-            ].join('\0');
+            return 'inspected=1\ntls=1\npermitWrite=1\nauthentication=1\nrandomUrl=0\nreadonly=0\nunknown=0\npath=/console/\n';
         },
     };
 
-    const result = await inspectTtydListenersSafely(cockpit, [LISTENER], SOCKET_OUTPUT);
+    const result = await inspectTerminalListenersSafely(cockpit, 'ttyd', [LISTENER], SOCKET_OUTPUT);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].argv[0], 'bash');
-    assert.equal(calls[0].argv[1], '-c');
-    assert.equal(calls[0].argv[2], TTYD_REDACTION_SCRIPT);
-    assert.equal(calls[0].argv[4], '444');
-    assert.match(TTYD_REDACTION_SCRIPT, /<redacted>/);
+    assert.equal(calls[0].argv[4], 'ttyd');
+    assert.equal(calls[0].argv[5], '444');
     assert.equal(result[7681].tls, true);
     assert.equal(result[7681].permitWrite, true);
     assert.equal(result[7681].authentication, true);
     assert.equal(result[7681].path, '/console/');
+    assert.equal(JSON.stringify(result).includes('password'), false);
 });
 
 test('ttyd inspection failure degrades to approximate discovery', async () => {
     const cockpit = { spawn: async () => { throw new Error('permission denied'); } };
-    const info = await inspectTtydListenersSafely(cockpit, [LISTENER], SOCKET_OUTPUT);
+    const info = await inspectTerminalListenersSafely(cockpit, 'ttyd', [LISTENER], SOCKET_OUTPUT);
     assert.equal(info[7681].inspected, false);
 
     const base = buildDiscoveryCandidates([LISTENER], [], 'mini-pc.local');
@@ -106,4 +78,21 @@ test('ttyd inspection failure degrades to approximate discovery', async () => {
     assert.equal(candidate.integration, 'ttyd');
     assert.equal(candidate.url, 'http://{host}:7681/');
     assert.ok(candidate.securityNotes.some(note => /approximate|safely/i.test(note)));
+});
+
+test('ttyd read-only and unknown option facts are reported conservatively', () => {
+    const base = buildDiscoveryCandidates([LISTENER], [], 'mini-pc.local');
+    const [candidate] = applyTtydDiscoveryCandidates(base, {
+        7681: {
+            inspected: true,
+            tls: false,
+            permitWrite: false,
+            authentication: false,
+            readonly: true,
+            unknownOptions: true,
+            path: '/',
+        },
+    });
+    assert.ok(candidate.securityNotes.some(note => note.includes('explicitly read-only')));
+    assert.ok(candidate.securityNotes.some(note => note.includes('Unrecognized ttyd options')));
 });
