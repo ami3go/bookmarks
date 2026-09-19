@@ -115,7 +115,7 @@ export function ManagementDialogs({
                 isOpen={historyOpen}
                 onClose={() => setHistoryOpen(false)}
                 error={writeErrors.history}
-                history={config.history}
+                config={config}
                 onRestore={restoreHistory}
                 editMode={editMode}
                 saving={saving}
