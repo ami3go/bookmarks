@@ -1,36 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Alert } from '@patternfly/react-core/dist/esm/components/Alert/index.js';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
-import { Form } from '@patternfly/react-core/dist/esm/components/Form/index.js';
 import { Modal, ModalBody, ModalFooter, ModalHeader } from '@patternfly/react-core/dist/esm/components/Modal/index.js';
 
 import { useAdminPermission } from './app-providers.jsx';
+import { normalizeApplicationLauncher } from './application-launcher.js';
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
+import { LauncherEditorDialog } from './launcher-editor-dialog.jsx';
+import { LauncherOutputDialog } from './launcher-output-dialog.jsx';
 import {
-    GOTTY_LAUNCHER_PORT_END,
-    GOTTY_LAUNCHER_PORT_START,
-    findAvailableGoTTYLauncherPort,
-} from './gotty-launcher-ports.js';
-import { TerminalLauncherFields } from './launcher-form-fields.jsx';
-import {
-    TERMINAL_LAUNCHER_TYPE,
-    buildLauncherService,
-    defaultBinaryForProvider,
-    launcherDraft,
-    normalizeTerminalProvider,
-    stopTerminalLauncher,
-    terminalProviderLabel,
-    validateLauncherDraft,
-} from './terminal-launcher.js';
+    isLauncherService,
+    launcherStates,
+    readServiceOutput,
+    serviceKind,
+    stopService,
+} from './service-runtime.js';
+import { normalizeTerminalLauncher, terminalProviderLabel } from './terminal-launcher.js';
 
-const PRESETS = [
-    { label: 'MC', name: 'MC', command: 'mc', icon: '📁' },
-    { label: 'btop', name: 'btop', command: 'btop', icon: '📊' },
-    { label: 'Fish', name: 'Fish', command: 'fish', icon: '🐟' },
-];
+function launcherTimeout(service) {
+    const minutes = serviceKind(service) === 'terminal'
+        ? normalizeTerminalLauncher(service.gottyLauncher).autoStopMinutes
+        : normalizeApplicationLauncher(service.applicationLauncher).autoStopMinutes;
+    return minutes > 0 ? `${minutes} min` : 'No timeout';
+}
 
-function launchersFrom(config) {
-    return (config?.services || []).filter(service => service?.type === TERMINAL_LAUNCHER_TYPE);
+function launcherTypeLabel(service) {
+    if (serviceKind(service) === 'terminal')
+        return terminalProviderLabel(normalizeTerminalLauncher(service.gottyLauncher).provider);
+    return 'Application';
 }
 
 function messageFor(error) {
@@ -45,142 +42,96 @@ export function TerminalLauncherManager({ inline = false, visible = true, onOpen
     const allowed = useAdminPermission();
     const [open, setOpen] = useState(false);
     const [launchers, setLaunchers] = useState([]);
-    const [draft, setDraft] = useState(null);
-    const [editingId, setEditingId] = useState(null);
-    const [errors, setErrors] = useState({});
+    const [states, setStates] = useState(new Map());
+    const [editing, setEditing] = useState(null);
+    const [outputTarget, setOutputTarget] = useState(null);
+    const [output, setOutput] = useState('');
+    const [outputLoading, setOutputLoading] = useState(false);
     const [notice, setNotice] = useState('');
     const [saving, setSaving] = useState(false);
-    const [allocatingPort, setAllocatingPort] = useState(false);
 
     useEffect(() => {
         if (allowed === false)
             setOpen(false);
     }, [allowed]);
 
-    useEffect(() => {
-        onOpenChange?.(open);
-    }, [open, onOpenChange]);
+    useEffect(() => onOpenChange?.(open), [open, onOpenChange]);
 
     const refresh = async () => {
         const config = await readConfiguration();
-        const current = launchersFrom(config);
+        const current = (config.services || []).filter(isLauncherService);
         setLaunchers(current);
+        setStates(await launcherStates(current));
         return current;
     };
 
+    useEffect(() => {
+        if (!open)
+            return undefined;
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible')
+                refresh().catch(() => {});
+        }, 15000);
+        return () => window.clearInterval(timer);
+    }, [open]);
+
     const openManager = async () => {
         setNotice('');
-        setDraft(null);
-        setEditingId(null);
         try {
             await refresh();
-            setOpen(true);
         } catch (error) {
-            setNotice(messageFor(error));
-            setOpen(true);
+            setNotice(`Could not load applications: ${messageFor(error)}`);
         }
+        setOpen(true);
     };
 
-    const beginNew = async preset => {
-        setAllocatingPort(true);
-        setNotice('');
-        try {
-            const current = await refresh();
-            const port = await findAvailableGoTTYLauncherPort(window.cockpit, current);
-            if (!port) {
-                setNotice(`No free automatic terminal launcher port remains in ${GOTTY_LAUNCHER_PORT_START}-${GOTTY_LAUNCHER_PORT_END}.`);
-                return;
-            }
-            const base = launcherDraft(null, port);
-            setDraft({
-                ...base,
-                group: 'Applications',
-                ...(preset ? { name: preset.name, command: preset.command, icon: preset.icon } : {}),
-            });
-            setEditingId(null);
-            setErrors({});
-        } catch (error) {
-            setNotice(`Could not choose a launcher port: ${messageFor(error)}`);
-        } finally {
-            setAllocatingPort(false);
-        }
-    };
-
-    const beginEdit = service => {
-        setDraft(launcherDraft(service));
-        setEditingId(service.id);
-        setErrors({});
-        setNotice('');
-    };
-
-    const update = (field, value) => {
-        setDraft(current => ({ ...current, [field]: value }));
-        setErrors(current => ({ ...current, [field]: undefined }));
-        setNotice('');
-    };
-
-    const updateProvider = providerValue => {
-        const provider = normalizeTerminalProvider(providerValue);
-        setDraft(current => {
-            const oldProvider = normalizeTerminalProvider(current.provider);
-            const oldDefault = defaultBinaryForProvider(oldProvider);
-            return {
-                ...current,
-                provider,
-                binary: !current.binary || current.binary === oldDefault
-                    ? defaultBinaryForProvider(provider)
-                    : current.binary,
-            };
-        });
-        setErrors(current => ({ ...current, provider: undefined, binary: undefined }));
-        setNotice('');
-    };
-
-    const save = async event => {
-        event.preventDefault();
-        const validation = validateLauncherDraft(draft);
-        setErrors(validation);
-        if (Object.keys(validation).length)
-            return;
-
+    const stopLauncher = async service => {
         setSaving(true);
         setNotice('');
         try {
-            let original = null;
-            await modifyConfiguration(current => {
-                const services = [...current.services];
-                const index = editingId ? services.findIndex(service => service?.id === editingId && service?.type === TERMINAL_LAUNCHER_TYPE) : -1;
-                original = index >= 0 ? services[index] : null;
-                const service = buildLauncherService({ ...draft, group: draft.group || 'Applications' }, original);
-                if (index >= 0)
-                    services[index] = service;
-                else
-                    services.push(service);
-                return { ...current, services };
-            }, editingId ? `Edited terminal launcher ${draft.name}` : `Added terminal launcher ${draft.name}`);
-
-            if (original)
-                await stopTerminalLauncher(window.cockpit, original).catch(() => {});
+            await stopService(service);
             await refresh();
-            setDraft(null);
-            setEditingId(null);
+            setNotice(`${service.name || 'Launcher'} stopped.`);
         } catch (error) {
-            setNotice(`Could not save launcher: ${messageFor(error)}`);
+            setNotice(`Could not stop ${service.name || 'launcher'}: ${messageFor(error)}`);
         } finally {
             setSaving(false);
         }
     };
 
-    const remove = async service => {
+    const showOutput = async service => {
+        setOutputTarget(service);
+        setOutputLoading(true);
+        try {
+            setOutput(await readServiceOutput(service));
+        } catch (error) {
+            setOutput(`Could not read output: ${messageFor(error)}`);
+        } finally {
+            setOutputLoading(false);
+        }
+    };
+
+    const removeLauncher = async service => {
+        if (!window.confirm(`Delete ${service.name || 'this launcher'}?`))
+            return;
         setSaving(true);
         setNotice('');
+        let deleteAnyway = false;
         try {
-            await stopTerminalLauncher(window.cockpit, service).catch(() => {});
+            try {
+                await stopService(service);
+            } catch (error) {
+                deleteAnyway = window.confirm(`Could not stop ${service.name || 'launcher'}: ${messageFor(error)}\n\nDelete the bookmark anyway? The process may remain running.`);
+                if (!deleteAnyway)
+                    return;
+            }
+
             await modifyConfiguration(current => ({
                 ...current,
-                services: current.services.filter(item => item?.id !== service.id),
-            }), `Deleted terminal launcher ${service.name}`);
+                services: current.services.filter(item => item.id !== service.id),
+            }), `Deleted ${service.name || 'launcher'}`);
             await refresh();
+            setNotice(deleteAnyway ? 'Launcher bookmark deleted; the process may still be running.' : 'Launcher deleted.');
         } catch (error) {
             setNotice(`Could not delete launcher: ${messageFor(error)}`);
         } finally {
@@ -188,102 +139,70 @@ export function TerminalLauncherManager({ inline = false, visible = true, onOpen
         }
     };
 
-    const stop = async service => {
-        setSaving(true);
-        setNotice('');
-        try {
-            await stopTerminalLauncher(window.cockpit, service);
-            setNotice(`${service.name} stopped.`);
-        } catch (error) {
-            setNotice(`Could not stop ${service.name}: ${messageFor(error)}`);
-        } finally {
-            setSaving(false);
-        }
-    };
+    const sortedLaunchers = useMemo(() => [...launchers].sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))), [launchers]);
 
-    if (allowed !== true)
+    if (!visible)
         return null;
 
     return (
-        <div className={inline ? 'terminal-launcher-manager-inline' : 'gotty-launcher-manager-floating'}>
-            {visible && (
-                <Button variant="secondary" onClick={openManager} isDisabled={saving || allocatingPort}>
-                    Terminal launchers
-                </Button>
-            )}
-
-            <Modal isOpen={open} onClose={() => !saving && !allocatingPort && setOpen(false)} variant="medium">
-                <ModalHeader title="Terminal launchers" />
+        <>
+            <Button variant="secondary" onClick={openManager} isDisabled={allowed !== true || saving}>
+                Applications
+            </Button>
+            <Modal isOpen={open} onClose={() => !saving && setOpen(false)} variant="medium">
+                <ModalHeader title="Applications" />
                 <ModalBody>
-                    {notice && <Alert isInline variant={notice.includes('Could not') || notice.includes('No free') ? 'danger' : 'info'} title={notice} />}
-
-                    {!draft ? (
-                        <>
-                            <p className="gotty-launcher-intro">
-                                On-demand terminal launchers start GoTTY or ttyd only when clicked and stop automatically after the configured runtime.
-                            </p>
-                            <div className="gotty-launcher-presets">
-                                <Button variant="primary" onClick={() => beginNew(null)} isDisabled={saving || allocatingPort}>
-                                    {allocatingPort ? 'Finding port…' : 'New terminal'}
-                                </Button>
-                                {PRESETS.map(preset => (
-                                    <Button variant="secondary" onClick={() => beginNew(preset)} isDisabled={saving || allocatingPort} key={preset.label}>
-                                        New {preset.label}
-                                    </Button>
-                                ))}
-                            </div>
-
-                            {launchers.length === 0 ? (
-                                <div className="gotty-launcher-empty">No on-demand terminal launchers configured yet.</div>
-                            ) : (
-                                <div className="gotty-launcher-list">
-                                    {launchers.map(service => {
-                                        const launcher = service.gottyLauncher || {};
-                                        return (
-                                            <div className="gotty-launcher-item" key={service.id}>
-                                                <div>
-                                                    <strong>{service.icon || '⌨️'} {service.name}</strong>
-                                                    <code>{terminalProviderLabel(launcher.provider)} · {launcher.command}</code>
-                                                    <span>TCP {launcher.port} · {launcher.address} · auto-stop {launcher.autoStopMinutes} min</span>
-                                                </div>
-                                                <div className="gotty-launcher-item-actions">
-                                                    <Button variant="link" onClick={() => beginEdit(service)} isDisabled={saving || allocatingPort}>Edit</Button>
-                                                    <Button variant="link" onClick={() => stop(service)} isDisabled={saving || allocatingPort}>Stop</Button>
-                                                    <Button variant="link" isDanger onClick={() => remove(service)} isDisabled={saving || allocatingPort}>Delete</Button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </>
+                    {notice && <Alert isInline variant={notice.startsWith('Could not') ? 'danger' : 'info'} title={notice} />}
+                    <p className="bookmark-field-help">Create launchers with Add app. This manager controls existing terminal and application launchers.</p>
+                    {!sortedLaunchers.length ? (
+                        <div className="bookmarks-empty">No launchers configured.</div>
                     ) : (
-                        <Form id="terminal-launcher-manager-form" onSubmit={save}>
-                            <TerminalLauncherFields
-                                draft={draft}
-                                errors={errors}
-                                onChange={update}
-                                onProviderChange={updateProvider}
-                                idPrefix="terminal-manager"
-                                showGroup
-                                showDerivedUrl={Boolean(editingId)}
-                            />
-                        </Form>
+                        <div className="bookmarks-history-list">
+                            {sortedLaunchers.map(service => {
+                                const state = states.get(service.id) || 'stopped';
+                                return (
+                                    <div className="bookmarks-history-item" key={service.id}>
+                                        <div>
+                                            <strong>{service.name || 'Unnamed launcher'}</strong>
+                                            <div>{launcherTypeLabel(service)} · {state === 'running' ? 'Running' : state === 'failed' ? 'Failed' : 'Stopped'} · {launcherTimeout(service)}</div>
+                                        </div>
+                                        <div className="bookmarks-management-actions">
+                                            <Button variant="secondary" onClick={() => stopLauncher(service)} isDisabled={saving || state === 'stopped'}>Stop</Button>
+                                            <Button variant="secondary" onClick={() => showOutput(service)} isDisabled={saving}>View output</Button>
+                                            <Button variant="secondary" onClick={() => setEditing(service)} isDisabled={saving}>Edit</Button>
+                                            <Button variant="danger" onClick={() => removeLauncher(service)} isDisabled={saving}>Delete</Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     )}
                 </ModalBody>
                 <ModalFooter>
-                    {draft ? (
-                        <>
-                            <Button variant="primary" type="submit" form="terminal-launcher-manager-form" isDisabled={saving}>
-                                {saving ? 'Saving…' : (editingId ? 'Save launcher' : 'Add launcher')}
-                            </Button>
-                            <Button variant="link" onClick={() => setDraft(null)} isDisabled={saving}>Back</Button>
-                        </>
-                    ) : (
-                        <Button variant="secondary" onClick={() => setOpen(false)} isDisabled={saving || allocatingPort}>Close</Button>
-                    )}
+                    <Button variant="secondary" onClick={() => refresh().catch(error => setNotice(messageFor(error)))} isDisabled={saving}>Refresh</Button>
+                    <Button variant="link" onClick={() => setOpen(false)} isDisabled={saving}>Close</Button>
                 </ModalFooter>
             </Modal>
-        </div>
+
+            <LauncherEditorDialog
+                service={editing}
+                onClose={() => setEditing(null)}
+                onSaved={() => {
+                    setEditing(null);
+                    refresh().catch(() => {});
+                }}
+            />
+
+            <LauncherOutputDialog
+                target={outputTarget}
+                output={output}
+                loading={outputLoading}
+                onRefresh={() => showOutput(outputTarget)}
+                onClose={() => {
+                    setOutputTarget(null);
+                    setOutput('');
+                }}
+            />
+        </>
     );
 }
