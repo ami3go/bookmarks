@@ -28,6 +28,7 @@ export function ManagementDialogs({
     editMode,
     deleteTarget,
     setDeleteTarget,
+    deleteStopFailed,
     deleteBookmark,
     settingsOpen,
     setSettingsOpen,
@@ -84,6 +85,7 @@ export function ManagementDialogs({
                 target={deleteTarget}
                 onClose={() => setDeleteTarget(null)}
                 error={writeErrors.delete}
+                stopFailed={deleteStopFailed}
                 onDelete={deleteBookmark}
                 saving={saving}
             />
