@@ -4,9 +4,8 @@ import assert from 'node:assert/strict';
 import {
     buildDiscoveryCandidates,
     gottyListenerPids,
-    inspectGoTTYListeners,
-    parseGoTTYCommandLine,
 } from '../src/discovery.js';
+import { inspectTerminalListenersSafely } from '../src/terminal-inspect.js';
 
 const GOTTY_LISTENER = {
     port: 8080,
@@ -16,9 +15,11 @@ const GOTTY_LISTENER = {
     localOnly: false,
 };
 
+const SOCKET_OUTPUT = 'LISTEN 0 128 0.0.0.0:8080 0.0.0.0:* users:(("gotty",pid=321,fd=5))';
+
 test('extracts only GoTTY listener PIDs from ss output', () => {
     const output = [
-        'LISTEN 0 128 0.0.0.0:8080 0.0.0.0:* users:(("gotty",pid=321,fd=5))',
+        SOCKET_OUTPUT,
         'LISTEN 0 128 [::]:8080 [::]:* users:(("gotty",pid=321,fd=6))',
         'LISTEN 0 128 0.0.0.0:3000 0.0.0.0:* users:(("grafana-server",pid=100,fd=7))',
     ].join('\n');
@@ -26,30 +27,7 @@ test('extracts only GoTTY listener PIDs from ss output', () => {
     assert.deepEqual(gottyListenerPids(output), { 8080: [321] });
 });
 
-test('parses GoTTY security and URL flags without retaining credentials', () => {
-    const commandLine = [
-        '/usr/local/bin/gotty',
-        '--path', '/terminal',
-        '--tls',
-        '--permit-write',
-        '--credential', 'alice:super-secret-password',
-        'bash',
-    ].join('\0');
-
-    const parsed = parseGoTTYCommandLine(commandLine);
-    assert.deepEqual(parsed, {
-        inspected: true,
-        tls: true,
-        permitWrite: true,
-        authentication: true,
-        randomUrl: false,
-        path: '/terminal/',
-    });
-    assert.equal(JSON.stringify(parsed).includes('super-secret-password'), false);
-    assert.equal(JSON.stringify(parsed).includes('alice'), false);
-});
-
-test('recognizes GoTTY and builds terminal-specific safe defaults', () => {
+test('recognizes GoTTY and builds terminal-specific safe defaults from facts', () => {
     const [candidate] = buildDiscoveryCandidates(
         [GOTTY_LISTENER],
         [],
@@ -61,6 +39,7 @@ test('recognizes GoTTY and builds terminal-specific safe defaults', () => {
                 permitWrite: true,
                 authentication: true,
                 randomUrl: false,
+                unknownOptions: false,
                 path: '/terminal/',
             },
         }
@@ -77,9 +56,8 @@ test('recognizes GoTTY and builds terminal-specific safe defaults', () => {
     assert.equal(candidate.bookmark.integration, 'gotty');
     assert.equal(candidate.bookmark.statusCheck, true);
     assert.ok(candidate.bookmark.tags.includes('GoTTY'));
-    assert.ok(candidate.bookmark.tags.includes('terminal'));
     assert.ok(candidate.securityNotes.some(note => note.includes('Interactive input is enabled')));
-    assert.ok(candidate.securityNotes.some(note => note.includes('Credentials are intentionally not read or stored')));
+    assert.ok(candidate.securityNotes.some(note => note.includes('Credential values never leave')));
 });
 
 test('does not auto-add GoTTY random URL mode', () => {
@@ -105,7 +83,7 @@ test('does not auto-add GoTTY random URL mode', () => {
     assert.ok(candidate.securityNotes.some(note => note.includes('generated final URL manually')));
 });
 
-test('falls back safely when GoTTY command-line details are unavailable', () => {
+test('falls back safely when GoTTY process details are unavailable', () => {
     const [candidate] = buildDiscoveryCandidates([GOTTY_LISTENER], [], 'mini-pc.local');
 
     assert.equal(candidate.integration, 'gotty');
@@ -116,34 +94,36 @@ test('falls back safely when GoTTY command-line details are unavailable', () => 
     assert.ok(candidate.securityNotes.some(note => note.includes('could not be inspected') || note.includes('approximate')));
 });
 
-test('inspects /proc command line for detected GoTTY without exposing raw arguments', async () => {
-    const output = 'LISTEN 0 128 0.0.0.0:8080 0.0.0.0:* users:(("gotty",pid=321,fd=5))';
+test('browser receives only terminal facts from host-side GoTTY inspection', async () => {
     const calls = [];
     const cockpit = {
         spawn: async (argv, options) => {
             calls.push({ argv, options });
-            return ['/usr/bin/gotty', '-t', '-m', '/console', '-c', 'user:password', 'bash'].join('\0');
+            return 'inspected=1\ntls=1\npermitWrite=1\nauthentication=1\nrandomUrl=0\nreadonly=0\nunknown=0\npath=/console/\n';
         },
     };
 
-    const result = await inspectGoTTYListeners(cockpit, [GOTTY_LISTENER], output);
+    const result = await inspectTerminalListenersSafely(cockpit, 'gotty', [GOTTY_LISTENER], SOCKET_OUTPUT);
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].argv, ['cat', '/proc/321/cmdline']);
-    assert.equal(result[8080].tls, true);
-    assert.equal(result[8080].path, '/console/');
-    assert.equal(result[8080].authentication, true);
+    assert.equal(calls[0].argv[0], 'bash');
+    assert.equal(calls[0].argv[4], 'gotty');
+    assert.equal(calls[0].argv[5], '321');
+    assert.deepEqual(result[8080], {
+        inspected: true,
+        tls: true,
+        permitWrite: true,
+        authentication: true,
+        randomUrl: false,
+        readonly: false,
+        unknownOptions: false,
+        path: '/console/',
+    });
     assert.equal(JSON.stringify(result).includes('password'), false);
 });
 
 test('process inspection permission failures degrade to approximate GoTTY discovery', async () => {
-    const output = 'LISTEN 0 128 0.0.0.0:8080 0.0.0.0:* users:(("gotty",pid=321,fd=5))';
-    const cockpit = {
-        spawn: async () => {
-            throw new Error('permission denied');
-        },
-    };
-
-    const result = await inspectGoTTYListeners(cockpit, [GOTTY_LISTENER], output);
+    const cockpit = { spawn: async () => { throw new Error('permission denied'); } };
+    const result = await inspectTerminalListenersSafely(cockpit, 'gotty', [GOTTY_LISTENER], SOCKET_OUTPUT);
     assert.equal(result[8080].inspected, false);
-    assert.match(result[8080].reason, /could not be inspected/i);
+    assert.match(result[8080].reason, /could not be inspected safely/i);
 });
