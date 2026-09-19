@@ -4,7 +4,6 @@ import { APPLICATION_LAUNCHER_TYPE } from './application-launcher.js';
 import {
     CONFIG_PATH,
     CONFIG_SYNTAX,
-    DEFAULT_CONFIG,
     EMPTY_BOOKMARK,
     MAX_CONFIG_SIZE,
     bookmarkWithFavorite,
@@ -17,7 +16,6 @@ import {
     moveGroup,
     moveService,
     normalizeGroupOrder,
-    normalizeImportedConfig,
     restoreHistoryEntry,
     serviceGroup,
     storedBookmark,
@@ -25,6 +23,8 @@ import {
 } from './bookmarks.js';
 import { runtimeFreeService, serviceSelectionKey } from './bookmark-ui.js';
 import { modifyConfiguration } from './cockpit-config.js';
+import { normalizeImportedConfiguration } from './import-config.js';
+import { applyPageSettings } from './page-settings.js';
 import { isLauncherService, openService as openConfiguredService, stopService } from './service-runtime.js';
 import { TERMINAL_LAUNCHER_TYPE } from './terminal-launcher.js';
 import { useDashboardKeyboard, useEditModeTimeout } from './use-dashboard-shortcuts.js';
@@ -45,7 +45,7 @@ function cockpitMessage(error) {
     }
 }
 
-export function useBookmarkManagement({ config, configError, configMissing, canEdit, view }) {
+export function useBookmarkManagement({ config, configError, configMissing, canEdit, view, pageSettings }) {
     const {
         hostname,
         query,
@@ -66,26 +66,19 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
     const [formErrors, setFormErrors] = useState({});
     const [writeErrors, setWriteErrors] = useState({});
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [deleteStopFailed, setDeleteStopFailed] = useState(false);
     const [moveTarget, setMoveTarget] = useState(null);
     const [moveGroupDraft, setMoveGroupDraft] = useState('Ungrouped');
     const [saving, setSaving] = useState(false);
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [settingsDraft, setSettingsDraft] = useState({
-        title: DEFAULT_CONFIG.title,
-        subtitle: DEFAULT_CONFIG.subtitle,
-        eyebrow: DEFAULT_CONFIG.eyebrow,
-        showEyebrow: true,
-        showHeader: true,
-        showTitle: true,
-        showSearch: true,
-        displayMode: DEFAULT_CONFIG.displayMode,
-    });
-    const [settingsError, setSettingsError] = useState('');
     const [importCandidate, setImportCandidate] = useState(null);
     const [historyOpen, setHistoryOpen] = useState(false);
     const [discoveryOpen, setDiscoveryOpen] = useState(false);
     const [terminalManagerOpen, setTerminalManagerOpen] = useState(false);
     const fileInputRef = useRef(null);
+
+    const settingsOpen = pageSettings.open;
+    const settingsDraft = pageSettings.draft;
+    const settingsError = pageSettings.error;
 
     useEffect(() => {
         if (configError) {
@@ -110,6 +103,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             setEditMode(false);
             setAddAppOpen(false);
             setLauncherEditorService(null);
+            pageSettings.close();
         }
     }, [canEdit]);
 
@@ -153,10 +147,16 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         setNotice(null);
 
         modifyConfiguration(transform, action)
-            .then(() => {
+            .then(result => {
                 setSaving(false);
-                setNotice({ variant: 'success', text: successText });
-                onSuccess?.();
+                const trimmed = Number(result?.writeInfo?.historyTrimmed || 0);
+                setNotice({
+                    variant: 'success',
+                    text: trimmed > 0
+                        ? `${successText} ${trimmed} older history entr${trimmed === 1 ? 'y was' : 'ies were'} trimmed to keep the configuration within its size limit.`
+                        : successText,
+                });
+                onSuccess?.(result);
             })
             .catch(error => {
                 setSaving(false);
@@ -199,10 +199,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         setLauncherEditorService(null);
         setDraft(editableBookmark(storedService));
         setFormErrors({});
-        setEditor({
-            mode: 'edit',
-            target: { index: service.sourceIndex, service: storedService },
-        });
+        setEditor({ mode: 'edit', target: { index: service.sourceIndex, service: storedService } });
     };
 
     const closeEditor = () => {
@@ -226,13 +223,10 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             return;
 
         if (editor.mode === 'add') {
-            modifyConfig(current => ({
-                ...current,
-                services: [...current.services, storedBookmark(draft)],
-            }), 'Bookmark added.', () => setEditor(null), `Added ${draft.name.trim()}`, 'editor');
+            modifyConfig(current => ({ ...current, services: [...current.services, storedBookmark(draft)] }),
+                'Bookmark added.', () => setEditor(null), `Added ${draft.name.trim()}`, 'editor');
             return;
         }
-
         if (!editMode)
             return;
 
@@ -240,7 +234,6 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             const index = findBookmarkIndex(current.services, editor.target);
             if (index === -1)
                 throw new Error('This bookmark was changed or removed. Reload the page and try again.');
-
             const updatedServices = [...current.services];
             updatedServices[index] = storedBookmark(draft, updatedServices[index]);
             return { ...current, services: updatedServices };
@@ -254,11 +247,12 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         if (!editMode || canEdit !== true)
             return;
         clearWriteError('delete');
+        setDeleteStopFailed(false);
         setSelectedBookmark(serviceSelectionKey(service));
         setDeleteTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
     };
 
-    const deleteBookmark = async () => {
+    const deleteBookmark = async (deleteAnyway = false) => {
         if (!deleteTarget)
             return;
 
@@ -266,21 +260,28 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         setSaving(true);
         setNotice(null);
         try {
-            if (isLauncherService(deleteTarget.service))
-                await stopService(deleteTarget.service);
+            if (isLauncherService(deleteTarget.service) && !deleteAnyway) {
+                try {
+                    await stopService(deleteTarget.service);
+                } catch (error) {
+                    const text = `Could not stop ${deleteTarget.service.name || 'launcher'}: ${cockpitMessage(error)}`;
+                    setDeleteStopFailed(true);
+                    setWriteErrors(current => ({ ...current, delete: `${text}. The bookmark has not been deleted.` }));
+                    setNotice({ variant: 'warning', text: `${text}. You can retry or choose Delete anyway.` });
+                    return;
+                }
+            }
 
             await modifyConfiguration(current => {
                 const index = findBookmarkIndex(current.services, deleteTarget);
                 if (index === -1)
                     throw new Error('This bookmark was changed or removed. Reload the page and try again.');
-                return {
-                    ...current,
-                    services: current.services.filter((_, serviceIndex) => serviceIndex !== index),
-                };
+                return { ...current, services: current.services.filter((_, serviceIndex) => serviceIndex !== index) };
             }, `Deleted ${deleteTarget.service?.name || 'bookmark'}`);
 
             setNotice({ variant: 'success', text: 'Bookmark deleted.' });
             setDeleteTarget(null);
+            setDeleteStopFailed(false);
             setSelectedBookmark(null);
         } catch (error) {
             const text = `Could not update ${CONFIG_PATH}: ${cockpitMessage(error)}`;
@@ -303,7 +304,6 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
     const moveBookmarkToGroup = () => {
         if (!moveTarget || !editMode)
             return;
-
         const destination = moveGroupDraft || 'Ungrouped';
         modifyConfig(current => {
             const index = findBookmarkIndex(current.services, moveTarget);
@@ -321,7 +321,6 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
     const toggleFavorite = service => {
         if (!editMode || canEdit !== true)
             return;
-
         const target = { index: service.sourceIndex, service: runtimeFreeService(service) };
         const nextFavorite = service.favorite !== true;
         modifyConfig(current => {
@@ -342,12 +341,11 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             setNotice({ variant: 'info', text: 'Use Add app to create another launcher so a new port and launcher URL can be allocated safely.' });
             return;
         }
-
         const target = { index: service.sourceIndex, service: runtimeFreeService(service) };
         modifyConfig(current => {
             const index = findBookmarkIndex(current.services, target);
             if (index === -1)
-                throw new Error('This bookmark was changed or removed. Reload the page and try again.');
+                throw new Error('This bookmark was changed or removed. Reload and try again.');
             const duplicate = duplicateBookmark(current.services[index], current.services);
             const updatedServices = [...current.services];
             updatedServices.splice(index + 1, 0, duplicate);
@@ -367,7 +365,6 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             setNotice({ variant: 'warning', text: 'Drag-and-drop reordering is limited to bookmarks in the same group.' });
             return;
         }
-
         const sourceStored = runtimeFreeService(source);
         const targetStored = runtimeFreeService(target);
         modifyConfig(current => {
@@ -388,7 +385,6 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         const targetPosition = position + direction;
         if (position === -1 || targetPosition < 0 || targetPosition >= siblingIndexes.length)
             return;
-
         setSelectedBookmark(serviceSelectionKey(service));
         const targetIndex = siblingIndexes[targetPosition];
         reorderBetween(service, {
@@ -403,7 +399,6 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         const targetPosition = position + direction;
         if (position === -1 || targetPosition < 0 || targetPosition >= groups.length)
             return;
-
         modifyConfig(current => {
             const currentOrder = normalizeGroupOrder(current.services, current.groupOrder);
             return { ...current, groupOrder: moveGroup(currentOrder, group, direction) };
@@ -420,38 +415,20 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         if (!editMode)
             return;
         clearWriteError('settings');
-        setSettingsDraft({
-            title: config.title,
-            subtitle: config.subtitle,
-            eyebrow: config.eyebrow,
-            showEyebrow: config.showEyebrow,
-            showHeader: config.showHeader,
-            showTitle: config.showTitle,
-            showSearch: config.showSearch,
-            displayMode: config.displayMode,
-        });
-        setSettingsError('');
-        setSettingsOpen(true);
+        pageSettings.openFor(config);
     };
 
     const submitSettings = event => {
         event.preventDefault();
         if (!settingsDraft.title.trim()) {
-            setSettingsError('Title is required.');
+            pageSettings.setError('Title is required.');
             return;
         }
-
-        modifyConfig(current => ({
-            ...current,
-            title: settingsDraft.title.trim(),
-            subtitle: settingsDraft.subtitle.trim(),
-            eyebrow: settingsDraft.eyebrow.trim(),
-            showEyebrow: settingsDraft.showEyebrow,
-            showHeader: settingsDraft.showHeader,
-            showTitle: settingsDraft.showTitle,
-            showSearch: settingsDraft.showSearch,
-            displayMode: settingsDraft.displayMode,
-        }), 'Page settings updated.', () => setSettingsOpen(false), 'Updated page settings', 'settings');
+        modifyConfig(current => applyPageSettings(current, settingsDraft), 'Page settings updated.', () => {
+            if (!settingsDraft.showSearch)
+                setQuery('');
+            pageSettings.close();
+        }, 'Updated page settings', 'settings');
     };
 
     const exportConfig = () => {
@@ -471,16 +448,14 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         event.target.value = '';
         if (!file)
             return;
-
         if (file.size > MAX_CONFIG_SIZE) {
             setNotice({ variant: 'danger', text: 'Import file is too large.' });
             return;
         }
-
         try {
             const parsed = JSON.parse(await file.text());
             clearWriteError('import');
-            setImportCandidate(normalizeImportedConfig(parsed, hostname));
+            setImportCandidate(normalizeImportedConfiguration(parsed, hostname));
         } catch (error) {
             setNotice({ variant: 'danger', text: `Could not import JSON: ${error.message}` });
         }
@@ -489,16 +464,13 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
     const confirmImport = () => {
         if (!importCandidate || !editMode)
             return;
-
-        modifyConfig(current => ({
-            ...importCandidate,
-            history: current.history,
-        }), `Imported ${importCandidate.services.length} bookmarks.`, () => {
-            setImportCandidate(null);
-            setQuery('');
-            setGroupFilter('all');
-            setSelectedBookmark(null);
-        }, 'Imported configuration', 'import');
+        modifyConfig(current => ({ ...importCandidate, history: current.history }),
+            `Imported ${importCandidate.services.length} bookmarks.`, () => {
+                setImportCandidate(null);
+                setQuery('');
+                setGroupFilter('all');
+                setSelectedBookmark(null);
+            }, 'Imported configuration', 'import');
     };
 
     const openHistory = () => {
@@ -532,17 +504,18 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         writeErrors,
         deleteTarget,
         setDeleteTarget,
+        deleteStopFailed,
         moveTarget,
         setMoveTarget,
         moveGroupDraft,
         setMoveGroupDraft,
         saving,
         settingsOpen,
-        setSettingsOpen,
+        setSettingsOpen: pageSettings.setOpen,
         settingsDraft,
-        setSettingsDraft,
+        setSettingsDraft: pageSettings.setDraft,
         settingsError,
-        setSettingsError,
+        setSettingsError: pageSettings.setError,
         importCandidate,
         setImportCandidate,
         historyOpen,
