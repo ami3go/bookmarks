@@ -157,13 +157,13 @@ test('page-settings preview reveals hidden header fields, previews density, and 
     fireEvent.click(screen.getByRole('button', { name: 'Apply preview draft' }));
     await waitFor(() => assert.equal(screen.getByRole('heading', { level: 1 }).textContent, 'Preview title'));
     assert.ok(screen.getByText('Preview eyebrow'));
-    assert.equal(screen.queryByRole('searchbox', { name: 'Search bookmarks' }), null);
+    assert.equal(screen.queryByRole('textbox', { name: 'Search bookmarks' }), null);
     assert.equal(screen.getByTestId('compact').textContent, 'true');
     assert.equal(screen.getByTestId('visible-count').textContent, '1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancel preview' }));
     await waitFor(() => assert.equal(screen.queryByRole('heading', { level: 1 }), null));
-    assert.equal(screen.getByRole('searchbox', { name: 'Search bookmarks' }).value, 'does-not-match');
+    assert.equal(screen.getByRole('textbox', { name: 'Search bookmarks' }).value, 'does-not-match');
     assert.equal(screen.getByTestId('visible-count').textContent, '0');
 });
 
