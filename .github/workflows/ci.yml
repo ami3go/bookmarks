@@ -27,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Install CI-only static analysis tools
-        run: npm install --no-save --package-lock=false --no-audit --no-fund eslint@9.39.5 eslint-plugin-react-hooks@7.1.1 knip@6.38.0
+      - name: Install CI-only analysis tools
+        run: npm install --no-save --package-lock=false --no-audit --no-fund eslint@9.39.5 eslint-plugin-react-hooks@7.1.1 knip@6.38.0 axe-core@4.10.3
 
       - name: Lint source and tests
         run: npx --no-install eslint src tests tests-ui build.js
