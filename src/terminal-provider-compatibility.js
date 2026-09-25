@@ -215,10 +215,3 @@ export function terminalProviderCompatibilityMessage(result) {
 
     return `${label} ${result.version} is compatible (minimum supported ${result.minimumVersion}).`;
 }
-
-export async function assertTerminalProviderCompatibility(cockpit, provider, binary) {
-    const result = await checkTerminalProviderCompatibility(cockpit, provider, binary);
-    if (!result.supported)
-        throw new Error(terminalProviderCompatibilityMessage(result));
-    return result;
-}
