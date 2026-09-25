@@ -14,6 +14,7 @@ const browserGlobals = {
     Node: 'readonly',
     ResizeObserver: 'readonly',
     SVGElement: 'readonly',
+    TextEncoder: 'readonly',
     URL: 'readonly',
     cancelAnimationFrame: 'readonly',
     clearInterval: 'readonly',
@@ -40,15 +41,17 @@ export default [
             ecmaVersion: 'latest',
             sourceType: 'module',
             parserOptions: { ecmaFeatures: { jsx: true } },
-            globals: browserGlobals,
+            globals: {
+                ...browserGlobals,
+                process: 'readonly',
+            },
         },
         plugins: {
             'react-hooks': reactHooks,
         },
         rules: {
-            ...reactHooks.configs.recommended.rules,
-            'no-undef': 'error',
-            'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+            'react-hooks/rules-of-hooks': 'error',
+            'react-hooks/exhaustive-deps': 'error',
         },
     },
     {
@@ -61,10 +64,6 @@ export default [
                 Buffer: 'readonly',
                 process: 'readonly',
             },
-        },
-        rules: {
-            'no-undef': 'error',
-            'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
         },
     },
 ];
