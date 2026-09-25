@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+    OVERSIZE_REPAIR_READ_SIZE,
+    canRepairOversizedConfiguration,
     configurationFromContent,
     configurationSizeBytes,
     emptyConfiguration,
     fitConfigurationForWrite,
     modifyConfiguration,
+    repairOversizedConfigurationHistory,
 } from '../src/cockpit-config.js';
 import { MAX_CONFIG_SIZE } from '../src/bookmarks.js';
 
@@ -34,11 +37,14 @@ function deferredFailure(error) {
     };
 }
 
-function installCockpitFile(file) {
+function installCockpitFile(file, captureOptions = null) {
     const previous = globalThis.window;
     globalThis.window = {
         cockpit: {
-            file: () => file,
+            file: (_path, options) => {
+                captureOptions?.(options);
+                return file;
+            },
         },
     };
     return () => {
@@ -98,6 +104,50 @@ test('rejects a configuration that cannot fit even without history', () => {
         services: [{ name: 'Huge', url: 'http://huge.test', description: 'x'.repeat(MAX_CONFIG_SIZE + 1000) }],
         history: [],
     }), /exceeding the .* write limit/i);
+});
+
+test('recognizes only read-size errors as eligible for destructive history repair', () => {
+    assert.equal(canRepairOversizedConfiguration({ problem: 'too-large' }), true);
+    assert.equal(canRepairOversizedConfiguration(new Error('maximum read size exceeded')), true);
+    assert.equal(canRepairOversizedConfiguration(new Error('invalid JSON at line 2')), false);
+});
+
+test('oversized repair performs one larger privileged read and removes history only', async () => {
+    const current = {
+        schemaVersion: 1,
+        title: 'Keep me',
+        services: [{ name: 'One', url: 'http://one.test' }],
+        history: [
+            { id: 'old-1', config: { services: [] } },
+            { id: 'old-2', config: { services: [] } },
+        ],
+    };
+    let replaced = null;
+    let replaceTag = null;
+    let options = null;
+    const file = {
+        read: () => deferredSuccess(current, 'repair-tag'),
+        replace(content, tag) {
+            replaced = content;
+            replaceTag = tag;
+            return deferredSuccess();
+        },
+        close() {},
+    };
+    const restore = installCockpitFile(file, value => { options = value; });
+    try {
+        const result = await repairOversizedConfigurationHistory();
+        assert.equal(options.max_read_size, OVERSIZE_REPAIR_READ_SIZE);
+        assert.equal(options.superuser, 'require');
+        assert.equal(replaceTag, 'repair-tag');
+        assert.equal(replaced.title, 'Keep me');
+        assert.equal(replaced.services.length, 1);
+        assert.deepEqual(replaced.history, []);
+        assert.equal(result.removedHistoryEntries, 2);
+        assert.ok(result.size <= MAX_CONFIG_SIZE);
+    } finally {
+        restore();
+    }
 });
 
 test('transform exceptions reject instead of leaving modify pending', async () => {
