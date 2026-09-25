@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { normalizeConfig } from './bookmarks.js';
 import { applyPageSettings, pageSettingsFrom } from './page-settings.js';
@@ -8,16 +8,16 @@ export function usePageSettings(config) {
     const [draft, setDraft] = useState(() => pageSettingsFrom(config));
     const [error, setError] = useState('');
 
-    const openFor = current => {
+    const openFor = useCallback(current => {
         setDraft(pageSettingsFrom(current));
         setError('');
         setOpen(true);
-    };
+    }, []);
 
-    const close = () => {
+    const close = useCallback(() => {
         setOpen(false);
         setError('');
-    };
+    }, []);
 
     const previewConfig = useMemo(() => {
         if (!open)
