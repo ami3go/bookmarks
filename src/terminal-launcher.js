@@ -8,6 +8,7 @@ import {
     prepareLauncherOutput,
     probeAddress,
     readLauncherOutput,
+    resolveExecutablePath,
     sleep,
     stopUserUnit,
     tcpPortListening,
@@ -20,7 +21,6 @@ import {
 // server for both old and new launchers.
 export const GOTTY_LAUNCHER_TYPE = 'gotty-launcher';
 export const TERMINAL_LAUNCHER_TYPE = GOTTY_LAUNCHER_TYPE;
-export const TERMINAL_LAUNCHER_EDIT_EVENT = 'cockpit-bookmarks:edit-terminal-launcher';
 export const GOTTY_LAUNCHER_PATH_PREFIX = '/cb-gotty-';
 export const TERMINAL_PROVIDER_GOTTY = 'gotty';
 export const TERMINAL_PROVIDER_TTYD = 'ttyd';
@@ -269,14 +269,14 @@ export function buildSystemdRunArguments(service, hostname = '', outputFile = ''
     });
 }
 
-export async function waitForLauncher(cockpit, service, attempts = 28, intervalMs = 250, hostname = '') {
+export async function waitForLauncher(cockpit, service, attempts = 28, intervalMs = 250, hostname = '', sleepFn = sleep) {
     const launcher = normalizeTerminalLauncher(service?.gottyLauncher);
     const address = expandLauncherHost(launcher.address, hostname);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         if (await tcpPortReady(cockpit, address, launcher.port))
             return true;
         if (attempt + 1 < attempts)
-            await sleep(intervalMs);
+            await sleepFn(intervalMs);
     }
     return false;
 }
@@ -293,11 +293,15 @@ async function runtimeTerminalService(cockpit, service, hostname) {
     const address = launcher.provider === TERMINAL_PROVIDER_TTYD
         ? await resolveTtydBindAddress(cockpit, expandedAddress)
         : stripLauncherHostBrackets(expandedAddress);
+    const binary = await resolveExecutablePath(cockpit, expandLauncherHost(launcher.binary, hostname));
+    const command = await resolveExecutablePath(cockpit, expandLauncherHost(launcher.command, hostname));
     return {
         ...service,
         gottyLauncher: {
             ...launcher,
             address,
+            binary,
+            command,
         },
     };
 }
