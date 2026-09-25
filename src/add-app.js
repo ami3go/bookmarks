@@ -52,8 +52,17 @@ function terminalPreset(type) {
 export function createAddAppDraft(value, port) {
     const type = normalizeAddAppType(value);
 
-    if (type === APP_TYPE_AGENT_OF_EMPIRES)
-        return agentOfEmpiresDraft(port);
+    if (type === APP_TYPE_AGENT_OF_EMPIRES) {
+        const draft = agentOfEmpiresDraft(port);
+        const args = ['serve', '--host', '0.0.0.0', '--daemon'];
+        if (Number(port) !== 8080)
+            args.push('--port', '{port}');
+        return {
+            ...draft,
+            args: args.join('\n'),
+            bindHost: '0.0.0.0',
+        };
+    }
 
     if (isTerminalAddAppType(type)) {
         const provider = type === APP_TYPE_TTYD ? TERMINAL_PROVIDER_TTYD : TERMINAL_PROVIDER_GOTTY;
