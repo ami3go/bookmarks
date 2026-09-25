@@ -3,14 +3,16 @@ import test from 'node:test';
 
 import {
     APP_TYPE_AGENT_OF_EMPIRES,
+    APP_TYPE_BTOP,
     APP_TYPE_CUSTOM,
+    APP_TYPE_FISH,
     APP_TYPE_GOTTY,
+    APP_TYPE_MC,
     APP_TYPE_TTYD,
     addAppTypeLabel,
     createAddAppDraft,
     isTerminalAddAppType,
     normalizeAddAppType,
-    resolveApplicationCommandPaths,
 } from '../src/add-app.js';
 
 test('add-app type normalization and labels are stable', () => {
@@ -19,6 +21,9 @@ test('add-app type normalization and labels are stable', () => {
     assert.equal(addAppTypeLabel(APP_TYPE_AGENT_OF_EMPIRES), 'Agent of Empires');
     assert.equal(isTerminalAddAppType(APP_TYPE_GOTTY), true);
     assert.equal(isTerminalAddAppType(APP_TYPE_TTYD), true);
+    assert.equal(isTerminalAddAppType(APP_TYPE_MC), true);
+    assert.equal(isTerminalAddAppType(APP_TYPE_BTOP), true);
+    assert.equal(isTerminalAddAppType(APP_TYPE_FISH), true);
     assert.equal(isTerminalAddAppType(APP_TYPE_CUSTOM), false);
 });
 
@@ -31,7 +36,7 @@ test('custom application defaults preserve automatic application settings', () =
     assert.equal(draft.startupTimeoutSeconds, '20');
 });
 
-test('Agent of Empires preset is ready to launch without an auto-stop timeout', () => {
+test('Agent of Empires keeps portable command names until launch time', () => {
     const draft = createAddAppDraft(APP_TYPE_AGENT_OF_EMPIRES, 47322);
     assert.equal(draft.name, 'Agent of Empires');
     assert.equal(draft.command, 'aoe');
@@ -67,30 +72,21 @@ test('ttyd preset switches provider and executable automatically', () => {
     assert.equal(draft.group, 'Applications');
 });
 
+test('MC, btop and Fish presets share the Add app terminal path', () => {
+    const mc = createAddAppDraft(APP_TYPE_MC, 47230);
+    const btop = createAddAppDraft(APP_TYPE_BTOP, 47231);
+    const fish = createAddAppDraft(APP_TYPE_FISH, 47232);
 
-test('Agent of Empires resolves command and live URL command to the discovered binary', async () => {
-    const draft = createAddAppDraft(APP_TYPE_AGENT_OF_EMPIRES, 47322);
-    const calls = [];
-    const cockpit = {
-        spawn: async args => {
-            calls.push(args);
-            return 'aoe: /home/test/.local/bin/aoe\n';
-        },
-    };
-
-    const resolved = await resolveApplicationCommandPaths(cockpit, draft);
-    assert.equal(resolved.command, '/home/test/.local/bin/aoe');
-    assert.equal(resolved.urlCommand, '/home/test/.local/bin/aoe');
-    assert.deepEqual(calls, [['whereis', '-b', 'aoe']]);
-});
-
-test('application command resolution preserves preset names when whereis finds nothing', async () => {
-    const draft = createAddAppDraft(APP_TYPE_AGENT_OF_EMPIRES, 47323);
-    const cockpit = {
-        spawn: async () => 'aoe:\n',
-    };
-
-    const resolved = await resolveApplicationCommandPaths(cockpit, draft);
-    assert.equal(resolved.command, 'aoe');
-    assert.equal(resolved.urlCommand, 'aoe');
+    assert.deepEqual(
+        [mc.name, mc.command, mc.provider, mc.port],
+        ['MC', 'mc', 'gotty', '47230']
+    );
+    assert.deepEqual(
+        [btop.name, btop.command, btop.provider, btop.port],
+        ['btop', 'btop', 'gotty', '47231']
+    );
+    assert.deepEqual(
+        [fish.name, fish.command, fish.provider, fish.port],
+        ['Fish', 'fish', 'gotty', '47232']
+    );
 });

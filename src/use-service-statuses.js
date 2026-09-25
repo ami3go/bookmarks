@@ -27,15 +27,6 @@ export function useServiceStatuses(services, hostname = window.location.hostname
         endpoints: serviceEndpoints(service, hostname),
     })), [services, hostname]);
 
-    const fingerprint = useMemo(
-        () => JSON.stringify(entries.map(entry => [
-            entry.key,
-            entry.enabled,
-            entry.endpoints.map(endpoint => endpoint.url),
-        ])),
-        [entries]
-    );
-
     const refresh = async () => {
         setRefreshing(true);
         try {
@@ -58,7 +49,7 @@ export function useServiceStatuses(services, hostname = window.location.hostname
                     setRefreshing(false);
             });
         return () => { active = false; };
-    }, [fingerprint]);
+    }, [entries]);
 
     return {
         statuses,

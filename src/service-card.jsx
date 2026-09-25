@@ -5,11 +5,13 @@ import { normalizeAccent, serviceEndpoints, serviceGroup } from './bookmarks.js'
 import { serviceSelectionKey } from './bookmark-ui.js';
 import { SelectControl } from './form-controls.jsx';
 import { ServiceActionMenu } from './service-action-menu.jsx';
+import { isLauncherService } from './service-runtime.js';
 import { serviceStatusKey, statusLabel } from './use-service-statuses.js';
 
 export function ServiceCard({
     service,
     status,
+    launcherState,
     hostname,
     editMode,
     canEdit,
@@ -22,6 +24,9 @@ export function ServiceCard({
     compactMode,
     onSelectService,
     onOpenService,
+    onStopLauncher,
+    onRestartLauncher,
+    onViewOutput,
     onSetSelectedBookmark,
     onSetDragSource,
     onReorderBetween,
@@ -49,33 +54,29 @@ export function ServiceCard({
     const serviceStatus = status || { state: 'unknown' };
     const accent = normalizeAccent(service.accent);
     const statusKey = serviceStatusKey(service);
+    const launcher = isLauncherService(service);
+    const runtimeState = launcherState || 'stopped';
+
+    const cardInteractionProps = editMode ? {
+        role: 'button',
+        tabIndex: 0,
+        'aria-label': `${isFavorites ? 'Select' : 'Select for reordering'} ${service.name || 'service'}`,
+        'aria-pressed': isSelected,
+        onClick: () => canEdit === true && onSelectService(service),
+        onKeyDown: event => {
+            if ((event.key === 'Enter' || event.key === ' ') && canEdit === true) {
+                event.preventDefault();
+                onSelectService(service);
+            }
+        },
+    } : {};
 
     return (
         <Card
             className={`bookmark-card${compactMode ? ' is-compact' : ''}${editMode ? ' is-editable' : ''}${isSelected ? ' is-selected' : ''}${isDragging ? ' is-dragging' : ''}${accent !== 'none' ? ` bookmark-accent-${accent}` : ''}`}
             key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
-            role={editMode ? 'button' : 'link'}
-            tabIndex={0}
             draggable={!isFavorites && editMode && canEdit === true && !saving}
-            aria-label={editMode
-                ? `${isFavorites ? 'Select' : 'Select for reordering'} ${service.name || 'service'}`
-                : `Open ${service.name || 'service'} using ${selectedEndpoint.label} in ${opensSameTab ? 'the same tab' : 'a new tab'}`}
-            aria-pressed={editMode ? isSelected : undefined}
-            onClick={() => {
-                if (editMode && canEdit === true)
-                    onSelectService(service);
-                else
-                    onOpenService({ ...service, resolvedUrl: selectedEndpoint.url });
-            }}
-            onKeyDown={event => {
-                if (event.key === 'Enter' || (editMode && event.key === ' ')) {
-                    event.preventDefault();
-                    if (editMode && canEdit === true)
-                        onSelectService(service);
-                    else if (event.key === 'Enter')
-                        onOpenService({ ...service, resolvedUrl: selectedEndpoint.url });
-                }
-            }}
+            {...cardInteractionProps}
             onDragStart={event => {
                 if (isFavorites || !editMode || canEdit !== true || saving) {
                     event.preventDefault();
@@ -102,11 +103,34 @@ export function ServiceCard({
         >
             <CardTitle>
                 <div className="bookmark-title-row">
-                    <div className="bookmark-title-main">
-                        <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
-                        <span>{service.name || 'Unnamed service'}</span>
-                        {service.favorite === true && <span aria-hidden="true" title="Favorite">★</span>}
-                    </div>
+                    {launcher && !editMode ? (
+                        <button
+                            type="button"
+                            className="bookmark-title-main bookmark-launcher-primary"
+                            onClick={() => onOpenService({ ...service, resolvedUrl: selectedEndpoint.url })}
+                        >
+                            <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
+                            <span>{service.name || 'Unnamed service'}</span>
+                            {service.favorite === true && <span aria-hidden="true" title="Favorite">★</span>}
+                        </button>
+                    ) : !editMode ? (
+                        <a
+                            className="bookmark-title-main bookmark-card-primary-link"
+                            href={selectedEndpoint.url}
+                            target={opensSameTab ? '_self' : '_blank'}
+                            rel={opensSameTab ? undefined : 'noopener noreferrer'}
+                        >
+                            <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
+                            <span>{service.name || 'Unnamed service'}</span>
+                            {service.favorite === true && <span aria-hidden="true" title="Favorite">★</span>}
+                        </a>
+                    ) : (
+                        <div className="bookmark-title-main">
+                            <span className="bookmark-icon" aria-hidden="true">{service.icon || '↗'}</span>
+                            <span>{service.name || 'Unnamed service'}</span>
+                            {service.favorite === true && <span aria-hidden="true" title="Favorite">★</span>}
+                        </div>
+                    )}
                     <div
                         className="bookmark-card-actions"
                         onClick={event => {
@@ -119,12 +143,16 @@ export function ServiceCard({
                         <ServiceActionMenu
                             service={service}
                             selectedEndpoint={selectedEndpoint}
+                            launcherState={runtimeState}
                             editMode={editMode}
                             canEdit={canEdit}
                             saving={saving}
                             canMoveUp={canMoveUp}
                             canMoveDown={canMoveDown}
                             onOpenService={onOpenService}
+                            onStopLauncher={onStopLauncher}
+                            onRestartLauncher={onRestartLauncher}
+                            onViewOutput={onViewOutput}
                             onShowQr={() => onShowQr({
                                 name: service.name || 'Service',
                                 label: selectedEndpoint.label,
@@ -159,6 +187,11 @@ export function ServiceCard({
                 )}
                 <p className="bookmark-description">{service.description || selectedEndpoint.url}</p>
                 <div className="bookmark-meta">
+                    {launcher && (
+                        <span className={`bookmark-launcher-state is-${runtimeState}`} title={`Launcher is ${runtimeState}`}>
+                            {runtimeState === 'running' ? 'Running' : runtimeState === 'failed' ? 'Failed' : 'Stopped'}
+                        </span>
+                    )}
                     <span
                         className={`bookmark-service-status is-${serviceStatus.state}`}
                         title={serviceStatus.reason || `${statusLabel(serviceStatus)} from the Cockpit host`}

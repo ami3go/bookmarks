@@ -1,11 +1,14 @@
 import { expandUrl } from './bookmarks.js';
 import {
     APPLICATION_LAUNCHER_TYPE,
+    applicationUnitName,
     startApplicationLauncher,
     stopApplicationLauncher,
 } from './application-launcher.js';
+import { errorMessage, readLauncherOutput } from './launcher-runtime.js';
 import {
     TERMINAL_LAUNCHER_TYPE,
+    launcherUnitName,
     startTerminalLauncher,
     stopTerminalLauncher,
 } from './terminal-launcher.js';
@@ -13,6 +16,7 @@ import {
 export const SERVICE_KIND_BOOKMARK = 'bookmark';
 export const SERVICE_KIND_TERMINAL = 'terminal';
 export const SERVICE_KIND_APPLICATION = 'application';
+export const LAUNCHER_STATE_CHANGED_EVENT = 'cockpit-bookmarks:launcher-state-changed';
 
 export function serviceKind(service) {
     if (service?.type === TERMINAL_LAUNCHER_TYPE)
@@ -26,11 +30,22 @@ export function isLauncherService(service) {
     return serviceKind(service) !== SERVICE_KIND_BOOKMARK;
 }
 
-function errorMessage(cockpit, error) {
+export function serviceUnitName(service) {
+    const kind = serviceKind(service);
+    if (kind === SERVICE_KIND_TERMINAL)
+        return launcherUnitName(service.id);
+    if (kind === SERVICE_KIND_APPLICATION)
+        return applicationUnitName(service.id);
+    return '';
+}
+
+function emitLauncherStateChanged(service) {
     try {
-        return cockpit?.message ? cockpit.message(error) : String(error?.message || error || 'Unknown error');
+        window.dispatchEvent(new CustomEvent(LAUNCHER_STATE_CHANGED_EVENT, {
+            detail: { id: service?.id || '', unit: serviceUnitName(service) },
+        }));
     } catch (_) {
-        return String(error?.message || error || 'Unknown error');
+        // Runtime helpers are also exercised in non-browser unit tests.
     }
 }
 
@@ -65,7 +80,7 @@ function openPendingTab(openWindow, title, message) {
     return tab;
 }
 
-async function openTerminal(service, cockpit, hostname, openWindow) {
+async function openTerminal(service, cockpit, hostname, openWindow, startTerminal) {
     const tab = openPendingTab(
         openWindow,
         'Starting terminal…',
@@ -75,17 +90,19 @@ async function openTerminal(service, cockpit, hostname, openWindow) {
         return null;
 
     try {
-        await startTerminalLauncher(cockpit, service, hostname);
+        await startTerminal(cockpit, service, hostname);
+        emitLauncherStateChanged(service);
         if (!tab.closed)
             tab.location.replace(expandUrl(service.url, hostname));
         return tab;
     } catch (error) {
+        emitLauncherStateChanged(service);
         writePendingTab(tab, 'Could not start terminal', errorMessage(cockpit, error));
         return tab;
     }
 }
 
-async function openApplication(service, cockpit, hostname, openWindow) {
+async function openApplication(service, cockpit, hostname, openWindow, startApplication) {
     const tab = openPendingTab(
         openWindow,
         'Starting application…',
@@ -95,11 +112,13 @@ async function openApplication(service, cockpit, hostname, openWindow) {
         return null;
 
     try {
-        const result = await startApplicationLauncher(cockpit, service, hostname);
+        const result = await startApplication(cockpit, service, hostname);
+        emitLauncherStateChanged(service);
         if (!tab.closed)
             tab.location.replace(result.url);
         return tab;
     } catch (error) {
+        emitLauncherStateChanged(service);
         writePendingTab(tab, 'Could not start application', errorMessage(cockpit, error));
         return tab;
     }
@@ -109,12 +128,14 @@ export function openService(service, {
     cockpit = window.cockpit,
     hostname = window.location.hostname,
     openWindow = window.open.bind(window),
+    startTerminal = startTerminalLauncher,
+    startApplication = startApplicationLauncher,
 } = {}) {
     const kind = serviceKind(service);
     if (kind === SERVICE_KIND_TERMINAL)
-        return openTerminal(service, cockpit, hostname, openWindow);
+        return openTerminal(service, cockpit, hostname, openWindow, startTerminal);
     if (kind === SERVICE_KIND_APPLICATION)
-        return openApplication(service, cockpit, hostname, openWindow);
+        return openApplication(service, cockpit, hostname, openWindow, startApplication);
 
     const url = service?.resolvedUrl || expandUrl(service?.url, hostname);
     if (service?.openMode === 'same-tab')
@@ -125,8 +146,82 @@ export function openService(service, {
 export async function stopService(service, cockpit = window.cockpit) {
     const kind = serviceKind(service);
     if (kind === SERVICE_KIND_TERMINAL)
-        return stopTerminalLauncher(cockpit, service);
-    if (kind === SERVICE_KIND_APPLICATION)
-        return stopApplicationLauncher(cockpit, service);
+        await stopTerminalLauncher(cockpit, service);
+    else if (kind === SERVICE_KIND_APPLICATION)
+        await stopApplicationLauncher(cockpit, service);
+    else
+        return undefined;
+    emitLauncherStateChanged(service);
     return undefined;
+}
+
+export async function restartService(service, {
+    cockpit = window.cockpit,
+    hostname = window.location.hostname,
+} = {}) {
+    if (!isLauncherService(service))
+        return undefined;
+    await stopService(service, cockpit);
+    const kind = serviceKind(service);
+    const result = kind === SERVICE_KIND_TERMINAL
+        ? await startTerminalLauncher(cockpit, service, hostname)
+        : await startApplicationLauncher(cockpit, service, hostname);
+    emitLauncherStateChanged(service);
+    return result;
+}
+
+export async function readServiceOutput(service, cockpit = window.cockpit, maxBytes = 65536) {
+    const unit = serviceUnitName(service);
+    if (!unit)
+        return '';
+    return readLauncherOutput(cockpit, unit, maxBytes);
+}
+
+export function parseLauncherStates(output) {
+    const states = new Map();
+    let id = '';
+    let activeState = '';
+    const flush = () => {
+        if (!id)
+            return;
+        states.set(id, activeState === 'active' ? 'running' : activeState === 'failed' ? 'failed' : 'stopped');
+        id = '';
+        activeState = '';
+    };
+
+    for (const line of String(output || '').split(/\r?\n/)) {
+        if (!line.trim()) {
+            flush();
+            continue;
+        }
+        if (line.startsWith('Id='))
+            id = line.slice(3).trim();
+        else if (line.startsWith('ActiveState='))
+            activeState = line.slice('ActiveState='.length).trim();
+    }
+    flush();
+    return states;
+}
+
+export async function launcherStates(services, cockpit = window.cockpit) {
+    const launchers = (services || []).filter(isLauncherService);
+    const result = new Map(launchers.map(service => [service.id, 'stopped']));
+    const units = launchers.map(serviceUnitName).filter(Boolean);
+    if (!units.length || !cockpit?.spawn)
+        return result;
+
+    try {
+        const output = await cockpit.spawn([
+            'systemctl', '--user', 'show', '--property=Id', '--property=ActiveState', '--', ...units,
+        ], { err: 'ignore' });
+        const byUnit = parseLauncherStates(output);
+        for (const service of launchers) {
+            const state = byUnit.get(serviceUnitName(service));
+            if (state)
+                result.set(service.id, state);
+        }
+    } catch (_) {
+        // Unknown/unloaded units are equivalent to stopped launchers here.
+    }
+    return result;
 }

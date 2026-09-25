@@ -3,6 +3,8 @@ import { Divider } from '@patternfly/react-core/dist/esm/components/Divider/inde
 import { Dropdown, DropdownItem, DropdownList } from '@patternfly/react-core/dist/esm/components/Dropdown/index.js';
 import { MenuToggle } from '@patternfly/react-core/dist/esm/components/MenuToggle/index.js';
 
+import { isLauncherService } from './service-runtime.js';
+
 async function copyAddress(value) {
     if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value);
@@ -23,12 +25,16 @@ async function copyAddress(value) {
 export function ServiceActionMenu({
     service,
     selectedEndpoint,
+    launcherState,
     editMode,
     canEdit,
     saving,
     canMoveUp,
     canMoveDown,
     onOpenService,
+    onStopLauncher,
+    onRestartLauncher,
+    onViewOutput,
     onShowQr,
     onEdit,
     onToggleFavorite,
@@ -38,6 +44,7 @@ export function ServiceActionMenu({
     onDelete,
 }) {
     const [isOpen, setIsOpen] = useState(false);
+    const launcher = isLauncherService(service);
 
     const select = action => event => {
         event?.stopPropagation?.();
@@ -84,6 +91,29 @@ export function ServiceActionMenu({
                 <DropdownItem key="qr" onClick={select(onShowQr)}>
                     Show QR code
                 </DropdownItem>
+
+                {launcher && (
+                    <>
+                        <Divider key="launcher-divider" />
+                        <DropdownItem
+                            key="launcher-stop"
+                            onClick={select(() => onStopLauncher(service))}
+                            isDisabled={saving || launcherState === 'stopped'}
+                        >
+                            Stop
+                        </DropdownItem>
+                        <DropdownItem
+                            key="launcher-restart"
+                            onClick={select(() => onRestartLauncher(service))}
+                            isDisabled={saving}
+                        >
+                            Restart
+                        </DropdownItem>
+                        <DropdownItem key="launcher-output" onClick={select(() => onViewOutput(service))} isDisabled={saving}>
+                            View output
+                        </DropdownItem>
+                    </>
+                )}
 
                 {editMode && canEdit === true && (
                     <>

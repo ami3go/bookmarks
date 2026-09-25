@@ -2,40 +2,60 @@ name: Release
 
 on:
   workflow_dispatch:
-  # Workflow changes merged to main deliberately exercise the full release path.
-  # v0.7.1 release trigger: publish a uniquely versioned build containing the final launcher timeout UI.
   push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/release.yml
+    tags:
+      - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Run unit tests
+      - name: Run tests
         run: npm test
 
       - name: Build release artifacts
         run: make release-all
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          TAG="v${VERSION}"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "${GITHUB_REF_NAME:-}" != "$TAG" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${VERSION}." >&2
+            exit 1
+          fi
+
+      - name: Attest release archive provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: release/cockpit-bookmarks-*.tar.gz
+
+      - name: Attest Debian package provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: release/cockpit-bookmarks_*.deb
 
       - name: Publish GitHub release
         env:
@@ -78,8 +98,6 @@ jobs:
           }
 
           if gh release view "$TAG" >/dev/null 2>&1; then
-            # Existing releases may be augmented with packaging-only assets, but
-            # never rebuild a published application version from changed app inputs.
             changed_app_inputs="$(git diff --name-only "$TAG" "$GITHUB_SHA" -- src package.json package-lock.json build.js examples)"
             if [ -n "$changed_app_inputs" ]; then
               echo "Release $TAG exists, but application inputs changed since the tag:" >&2

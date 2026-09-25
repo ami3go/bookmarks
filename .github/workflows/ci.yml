@@ -16,16 +16,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Install CI-only analysis tools
+        run: npm install --no-save --package-lock=false --no-audit --no-fund eslint@9.39.5 eslint-plugin-react-hooks@7.1.1 knip@6.38.0 axe-core@4.10.3
+
+      - name: Lint source and tests
+        run: npx --no-install eslint src tests tests-ui build.js
+
+      - name: Check unused files and exports
+        run: npx --no-install knip --config knip.json --include files,exports --no-progress
 
       - name: Run unit and component tests
         run: npm test
@@ -163,14 +172,14 @@ jobs:
         run: sh tests/deb-package.sh
 
       - name: Upload production bundle
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: cockpit-bookmarks-dist
           path: dist/
           if-no-files-found: error
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: cockpit-bookmarks-release
           path: |

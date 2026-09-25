@@ -1,65 +1,90 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
-    GOTTY_REDACTION_SCRIPT,
-    inspectGoTTYListenersSafely,
-} from '../src/gotty-inspect.js';
+    TERMINAL_INSPECTION_SCRIPT,
+    parseTerminalInspectionFacts,
+} from '../src/terminal-inspect.js';
 
-const LISTENER = {
-    port: 8080,
-    addresses: ['0.0.0.0'],
-    processes: ['gotty'],
-    process: 'gotty',
-    localOnly: false,
-};
+function inspectFixture(provider, argv) {
+    const directory = mkdtempSync(join(tmpdir(), 'bookmarks-terminal-inspect-'));
+    const cmdline = join(directory, 'cmdline');
+    try {
+        writeFileSync(cmdline, Buffer.from(`${argv.join('\0')}\0`));
+        const result = spawnSync(
+            'bash',
+            ['-c', TERMINAL_INSPECTION_SCRIPT, 'bash', provider, '1', cmdline],
+            { encoding: 'utf8' }
+        );
+        assert.equal(result.status, 0, result.stderr);
+        return { raw: result.stdout, facts: parseTerminalInspectionFacts(result.stdout) };
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+}
 
-const SOCKET_OUTPUT = 'LISTEN 0 128 0.0.0.0:8080 0.0.0.0:* users:(("gotty",pid=321,fd=5))';
+test('GoTTY host inspection handles every credential spelling without exporting the secret', () => {
+    const variants = [
+        ['gotty', '--credential', 'admin:s3cret', '--tls', '--permit-write', '--path', '/console', 'bash'],
+        ['gotty', '--credential=admin:s3cret', '--tls', 'bash'],
+        ['gotty', '-credential', 'admin:s3cret', '-m', '/console', 'bash'],
+        ['gotty', '-credential=admin:s3cret', '-t', 'bash'],
+        ['gotty', '-cadmin:s3cret', '-w', 'bash'],
+    ];
 
-test('GoTTY inspection redacts credentials on the host before parsing', async () => {
-    const calls = [];
-    const cockpit = {
-        spawn: async (argv, options) => {
-            calls.push({ argv, options });
-            return [
-                '/usr/bin/gotty',
-                '--tls',
-                '--path', '/terminal',
-                '--credential', '<redacted>',
-                '--permit-write',
-                'bash',
-            ].join('\0');
-        },
-    };
+    for (const argv of variants) {
+        const { raw, facts } = inspectFixture('gotty', argv);
+        assert.equal(facts.inspected, true);
+        assert.equal(facts.authentication, true);
+        assert.equal(raw.includes('s3cret'), false);
+        assert.equal(raw.includes('admin'), false);
+    }
 
-    const result = await inspectGoTTYListenersSafely(cockpit, [LISTENER], SOCKET_OUTPUT);
-
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].argv[0], 'bash');
-    assert.equal(calls[0].argv[1], '-c');
-    assert.equal(calls[0].argv[2], GOTTY_REDACTION_SCRIPT);
-    assert.equal(calls[0].argv[4], '321');
-    assert.match(GOTTY_REDACTION_SCRIPT, /<redacted>/);
-    assert.match(GOTTY_REDACTION_SCRIPT, /\/proc\/\$pid\/cmdline/);
-    assert.deepEqual(result[8080], {
-        inspected: true,
-        tls: true,
-        permitWrite: true,
-        authentication: true,
-        randomUrl: false,
-        path: '/terminal/',
-    });
-    assert.equal(JSON.stringify(result).includes('password'), false);
+    const detailed = inspectFixture('gotty', variants[0]).facts;
+    assert.equal(detailed.tls, true);
+    assert.equal(detailed.permitWrite, true);
+    assert.equal(detailed.path, '/console/');
 });
 
-test('safe GoTTY inspection degrades to approximate discovery on failure', async () => {
-    const cockpit = {
-        spawn: async () => {
-            throw new Error('permission denied');
-        },
-    };
+test('ttyd host inspection handles attached, bundled and long credential spellings', () => {
+    const variants = [
+        ['ttyd', '-cadmin:s3cret', 'bash'],
+        ['ttyd', '-Wc', 'admin:s3cret', 'bash'],
+        ['ttyd', '--cred=admin:s3cret', 'bash'],
+        ['ttyd', '--credential', 'admin:s3cret', 'bash'],
+        ['ttyd', '--auth-header', 'X-Auth', 'bash'],
+    ];
 
-    const result = await inspectGoTTYListenersSafely(cockpit, [LISTENER], SOCKET_OUTPUT);
-    assert.equal(result[8080].inspected, false);
-    assert.match(result[8080].reason, /could not be inspected safely/i);
+    for (const argv of variants) {
+        const { raw, facts } = inspectFixture('ttyd', argv);
+        assert.equal(facts.inspected, true);
+        assert.equal(facts.authentication, true);
+        assert.equal(raw.includes('s3cret'), false);
+        assert.equal(raw.includes('admin'), false);
+    }
+
+    assert.equal(inspectFixture('ttyd', variants[1]).facts.permitWrite, true);
+});
+
+test('ttyd option grammar does not swallow writable flags and consumes value options', () => {
+    const facts = inspectFixture('ttyd', [
+        'ttyd', '-B', '-W', '-d', '7', '-U', 'user', '-I', 'index.html', '-f', 'monospace', '-b', '/term', 'bash',
+    ]).facts;
+
+    assert.equal(facts.permitWrite, true);
+    assert.equal(facts.path, '/term/');
+    assert.equal(facts.unknownOptions, false);
+});
+
+test('terminal inspection rejects malformed PIDs before reading proc', () => {
+    const result = spawnSync(
+        'bash',
+        ['-c', TERMINAL_INSPECTION_SCRIPT, 'bash', 'gotty', '../1'],
+        { encoding: 'utf8' }
+    );
+    assert.notEqual(result.status, 0);
 });

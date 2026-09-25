@@ -6,21 +6,3 @@
     display: grid;
     gap: 0.45rem;
 }
-
-/*
- * Page settings are edited in a modal and are not persisted until Save.
- * Preview the checkbox state immediately against the page behind the modal so
- * each visibility control has an unambiguous, independent effect.
- */
-body:has(#settings-show-header:not(:checked)) .bookmarks-eyebrow,
-body:has(#settings-show-header:not(:checked)) .bookmarks-subtitle {
-    display: none;
-}
-
-body:has(#settings-show-title:not(:checked)) .bookmarks-heading h1 {
-    display: none;
-}
-
-body:has(#settings-show-search:not(:checked)) .bookmarks-search {
-    display: none;
-}

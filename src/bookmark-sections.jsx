@@ -3,6 +3,7 @@ import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.
 
 import { ServiceGroup } from './service-group.jsx';
 import { ServiceQrDialog } from './service-qr-dialog.jsx';
+import { useLauncherStates } from './use-launcher-states.js';
 import { useServiceStatuses } from './use-service-statuses.js';
 
 export function BookmarkSections({
@@ -21,6 +22,9 @@ export function BookmarkSections({
     onMoveGroupWithinOrder,
     onSelectService,
     onOpenService,
+    onStopLauncher,
+    onRestartLauncher,
+    onViewOutput,
     onSetSelectedBookmark,
     onSetDragSource,
     onReorderBetween,
@@ -34,6 +38,7 @@ export function BookmarkSections({
     const [qrTarget, setQrTarget] = useState(null);
     const hostname = window.location.hostname;
     const { statuses, refreshing, refresh, summary } = useServiceStatuses(configServices, hostname);
+    const { states: launcherStates } = useLauncherStates(configServices);
 
     return (
         <>
@@ -59,6 +64,7 @@ export function BookmarkSections({
                         groups={groups}
                         configServices={configServices}
                         statuses={statuses}
+                        launcherStates={launcherStates}
                         hostname={hostname}
                         editMode={editMode}
                         canEdit={canEdit}
@@ -70,6 +76,9 @@ export function BookmarkSections({
                         onMoveGroupWithinOrder={onMoveGroupWithinOrder}
                         onSelectService={onSelectService}
                         onOpenService={onOpenService}
+                        onStopLauncher={onStopLauncher}
+                        onRestartLauncher={onRestartLauncher}
+                        onViewOutput={onViewOutput}
                         onSetSelectedBookmark={onSetSelectedBookmark}
                         onSetDragSource={onSetDragSource}
                         onReorderBetween={onReorderBetween}
@@ -84,11 +93,7 @@ export function BookmarkSections({
                 ))}
             </div>
 
-            <ServiceQrDialog
-                target={qrTarget}
-                onClose={() => setQrTarget(null)}
-                onOpenService={onOpenService}
-            />
+            <ServiceQrDialog target={qrTarget} onClose={() => setQrTarget(null)} onOpenService={onOpenService} />
         </>
     );
 }

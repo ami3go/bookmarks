@@ -12,12 +12,13 @@ import {
     loadCollapsedGroups,
 } from './bookmark-ui.js';
 
-export function useDashboardView(config) {
+export function useDashboardView(config, loaded = true, settingsPreview = false) {
     const [query, setQuery] = useState('');
     const [groupFilter, setGroupFilter] = useState('all');
     const [dragSource, setDragSource] = useState(null);
     const [collapsedGroups, setCollapsedGroups] = useState(loadCollapsedGroups);
     const hostname = window.location.hostname;
+    const filterQuery = settingsPreview && !config.showSearch ? '' : query;
 
     const groups = useMemo(
         () => normalizeGroupOrder(config.services, config.groupOrder),
@@ -29,9 +30,9 @@ export function useDashboardView(config) {
     );
 
     useEffect(() => {
-        if (!config.showSearch && query)
+        if (!settingsPreview && !config.showSearch && query)
             setQuery('');
-    }, [config.showSearch, query]);
+    }, [config.showSearch, query, settingsPreview]);
 
     useEffect(() => {
         if (groupFilter !== 'all' && !groups.includes(groupFilter))
@@ -39,6 +40,8 @@ export function useDashboardView(config) {
     }, [groupFilter, groups]);
 
     useEffect(() => {
+        if (!loaded)
+            return;
         setCollapsedGroups(current => {
             const available = new Set([
                 ...(hasFavorites ? [FAVORITES_SECTION_KEY] : []),
@@ -49,18 +52,20 @@ export function useDashboardView(config) {
                 return current;
             return next;
         });
-    }, [groups, hasFavorites]);
+    }, [groups, hasFavorites, loaded]);
 
     useEffect(() => {
+        if (!loaded)
+            return;
         try {
             window.localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...collapsedGroups]));
         } catch (_) {
             // Local storage is an optional convenience; the dashboard still works without it.
         }
-    }, [collapsedGroups]);
+    }, [collapsedGroups, loaded]);
 
     const services = useMemo(() => {
-        const needle = query.trim().toLowerCase();
+        const needle = filterQuery.trim().toLowerCase();
         return config.services
             .map((service, index) => ({
                 ...service,
@@ -76,7 +81,7 @@ export function useDashboardView(config) {
                 const haystack = `${service.name || ''} ${service.description || ''} ${service.group || ''} ${service.url || ''} ${tags}`.toLowerCase();
                 return haystack.includes(needle);
             });
-    }, [config.services, query, groupFilter, hostname]);
+    }, [config.services, filterQuery, groupFilter, hostname]);
 
     const groupedServices = useMemo(() => {
         const result = new Map();
@@ -135,6 +140,7 @@ export function useDashboardView(config) {
     return {
         hostname,
         query,
+        filterQuery,
         setQuery,
         groupFilter,
         setGroupFilter,

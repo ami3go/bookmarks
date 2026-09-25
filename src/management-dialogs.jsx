@@ -28,6 +28,7 @@ export function ManagementDialogs({
     editMode,
     deleteTarget,
     setDeleteTarget,
+    deleteStopFailed,
     deleteBookmark,
     settingsOpen,
     setSettingsOpen,
@@ -84,6 +85,7 @@ export function ManagementDialogs({
                 target={deleteTarget}
                 onClose={() => setDeleteTarget(null)}
                 error={writeErrors.delete}
+                stopFailed={deleteStopFailed}
                 onDelete={deleteBookmark}
                 saving={saving}
             />
@@ -113,7 +115,7 @@ export function ManagementDialogs({
                 isOpen={historyOpen}
                 onClose={() => setHistoryOpen(false)}
                 error={writeErrors.history}
-                history={config.history}
+                config={config}
                 onRestore={restoreHistory}
                 editMode={editMode}
                 saving={saving}

@@ -7,33 +7,44 @@ import { build } from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outputDir = path.join(root, '.ui-test-tmp');
-const outputFile = path.join(outputDir, 'components.test.mjs');
+const testEntries = [
+    'components.test.jsx',
+    'review-regressions.test.jsx',
+    'axe.test.jsx',
+];
 
 await rm(outputDir, { recursive: true, force: true });
 await mkdir(outputDir, { recursive: true });
 
 try {
-    await build({
-        entryPoints: [path.join(root, 'tests-ui', 'components.test.jsx')],
-        outfile: outputFile,
-        bundle: true,
-        external: [
-            'react',
-            'react/*',
-            'react-dom',
-            'react-dom/*',
-            'jsdom',
-            '@testing-library/react',
-            '@testing-library/dom',
-        ],
-        platform: 'node',
-        format: 'esm',
-        target: 'node18',
-        jsx: 'automatic',
-        logLevel: 'warning',
-    });
+    const outputFiles = [];
+    for (const entry of testEntries) {
+        const source = path.join(root, 'tests-ui', entry);
+        const output = path.join(outputDir, entry.replace(/\.jsx$/, '.mjs'));
+        await build({
+            entryPoints: [source],
+            outfile: output,
+            bundle: true,
+            external: [
+                'react',
+                'react/*',
+                'react-dom',
+                'react-dom/*',
+                'jsdom',
+                '@testing-library/react',
+                '@testing-library/dom',
+                'axe-core',
+            ],
+            platform: 'node',
+            format: 'esm',
+            target: 'node18',
+            jsx: 'automatic',
+            logLevel: 'warning',
+        });
+        outputFiles.push(output);
+    }
 
-    const result = spawnSync(process.execPath, ['--test', outputFile], {
+    const result = spawnSync(process.execPath, ['--test', ...outputFiles], {
         cwd: root,
         stdio: 'inherit',
         env: process.env,

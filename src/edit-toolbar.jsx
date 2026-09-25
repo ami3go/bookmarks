@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@patternfly/react-core/dist/esm/components/Button/index.js';
 
-import { ServiceDiscovery } from './service-discovery.jsx';
+import { ServiceDiscovery } from './terminal-service-discovery.jsx';
 import { TerminalLauncherManager } from './terminal-launcher-manager.jsx';
 
 export function EditToolbar({
@@ -29,9 +29,7 @@ export function EditToolbar({
                 <Button variant="secondary" onClick={onOpenSettings}>Page settings</Button>
                 <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Import JSON</Button>
                 <Button variant="secondary" onClick={onExport}>Export JSON</Button>
-                <Button variant="secondary" onClick={onOpenHistory}>
-                    History ({historyCount})
-                </Button>
+                <Button variant="secondary" onClick={onOpenHistory}>History ({historyCount})</Button>
             </div>
         </div>
     );

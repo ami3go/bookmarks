@@ -43,13 +43,6 @@ const PROCESS_LABELS = new Map([
     ['vaultwarden', 'Vaultwarden'],
 ]);
 
-const GOTTY_VALUE_OPTIONS = new Set([
-    '--address', '-a', '--port', '-p', '--path', '-m', '--credential', '-c', '--random-url-length',
-    '--tls-crt', '--tls-key', '--tls-ca-crt', '--index', '--title-format', '--reconnect-time',
-    '--max-connection', '--timeout', '--width', '--height', '--ws-origin', '--ws-query-args',
-    '--close-signal', '--close-timeout', '--config',
-]);
-
 function endpointParts(endpoint) {
     const value = String(endpoint || '').trim();
     const match = value.match(/^(.*):(\d+)$/);
@@ -168,111 +161,11 @@ export function gottyListenerPids(output) {
     return Object.fromEntries([...result].map(([port, pids]) => [port, [...pids]]));
 }
 
-function commandLineArguments(commandLine) {
-    const value = String(commandLine || '');
-    if (!value)
-        return [];
-    if (value.includes('\0'))
-        return value.split('\0').map(argument => argument.trim()).filter(Boolean);
-
-    return (value.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [])
-        .map(argument => argument.replace(/^(?:"(.*)"|'(.*)')$/, (_match, doubleQuoted, singleQuoted) => doubleQuoted ?? singleQuoted ?? ''));
-}
-
 function normalizeGoTTYPath(value) {
     const raw = String(value || '/').trim();
     if (!raw || raw === '/')
         return '/';
     return `/${raw.replace(/^\/+|\/+$/g, '')}/`;
-}
-
-export function parseGoTTYCommandLine(commandLine) {
-    const args = commandLineArguments(commandLine);
-    const result = {
-        inspected: true,
-        tls: false,
-        permitWrite: false,
-        authentication: false,
-        randomUrl: false,
-        path: '/',
-    };
-
-    for (let index = 1; index < args.length; index += 1) {
-        const argument = args[index];
-        if (argument === '--')
-            break;
-        if (!argument.startsWith('-'))
-            break;
-
-        if (argument === '--tls' || argument === '-t') {
-            result.tls = true;
-            continue;
-        }
-        if (argument === '--permit-write' || argument === '-w') {
-            result.permitWrite = true;
-            continue;
-        }
-        if (argument === '--random-url' || argument === '-r') {
-            result.randomUrl = true;
-            continue;
-        }
-        if (argument.startsWith('--path=')) {
-            result.path = normalizeGoTTYPath(argument.slice('--path='.length));
-            continue;
-        }
-        if (argument.startsWith('--credential=')) {
-            result.authentication = true;
-            continue;
-        }
-        if (argument === '--path' || argument === '-m') {
-            result.path = normalizeGoTTYPath(args[index + 1]);
-            index += 1;
-            continue;
-        }
-        if (argument === '--credential' || argument === '-c') {
-            result.authentication = true;
-            index += 1;
-            continue;
-        }
-
-        const equals = argument.indexOf('=');
-        const optionName = equals === -1 ? argument : argument.slice(0, equals);
-        if (GOTTY_VALUE_OPTIONS.has(optionName) && equals === -1)
-            index += 1;
-    }
-
-    return result;
-}
-
-export async function inspectGoTTYListeners(cockpit, listeners, socketOutput) {
-    const pidsByPort = gottyListenerPids(socketOutput);
-    const result = {};
-
-    await Promise.all((listeners || []).filter(listenerIsGoTTY).map(async listener => {
-        const pid = pidsByPort[listener.port]?.[0];
-        if (!pid) {
-            result[listener.port] = {
-                inspected: false,
-                reason: 'GoTTY process arguments are not visible to this user.',
-            };
-            return;
-        }
-
-        try {
-            const commandLine = await cockpit.spawn(['cat', `/proc/${pid}/cmdline`], {
-                superuser: 'try',
-                err: 'message',
-            });
-            result[listener.port] = parseGoTTYCommandLine(commandLine);
-        } catch (_) {
-            result[listener.port] = {
-                inspected: false,
-                reason: 'GoTTY process arguments could not be inspected.',
-            };
-        }
-    }));
-
-    return result;
 }
 
 function normalizeHostname(value) {
@@ -343,13 +236,15 @@ function gottyCandidate(listener, info, alreadyBookmarked) {
     if (info?.permitWrite)
         securityNotes.push('Interactive input is enabled (--permit-write). Treat this terminal as privileged access.');
     if (info?.authentication)
-        securityNotes.push('Basic authentication is enabled. Credentials are intentionally not read or stored.');
+        securityNotes.push('Basic authentication is enabled. Credential values never leave the host inspection process.');
     if (info?.tls)
         securityNotes.push('TLS is enabled by the GoTTY command line.');
     if (info?.randomUrl)
         securityNotes.push('Random URL mode is enabled. Enter the generated final URL manually; Bookmarks will not reconstruct the secret path.');
+    if (info?.unknownOptions)
+        securityNotes.push('Unrecognized GoTTY options were present; the inferred URL or security state may be approximate.');
     if (!info?.inspected)
-        securityNotes.push(info?.reason || 'GoTTY command-line options could not be inspected; URL settings are approximate.');
+        securityNotes.push(info?.reason || 'GoTTY options could not be inspected; URL settings are approximate.');
 
     const supported = !info?.randomUrl;
     const reason = info?.randomUrl ? 'GoTTY random URL requires a manual bookmark' : '';
@@ -371,6 +266,7 @@ function gottyCandidate(listener, info, alreadyBookmarked) {
             permitWrite: info?.permitWrite === true,
             authentication: info?.authentication === true,
             randomUrl: info?.randomUrl === true,
+            unknownOptions: info?.unknownOptions === true,
             path,
         },
         bookmark: {

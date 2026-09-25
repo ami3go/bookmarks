@@ -15,6 +15,7 @@ export function ServiceGroup({
     groups,
     configServices,
     statuses,
+    launcherStates,
     hostname,
     editMode,
     canEdit,
@@ -26,6 +27,9 @@ export function ServiceGroup({
     onMoveGroupWithinOrder,
     onSelectService,
     onOpenService,
+    onStopLauncher,
+    onRestartLauncher,
+    onViewOutput,
     onSetSelectedBookmark,
     onSetDragSource,
     onReorderBetween,
@@ -54,29 +58,9 @@ export function ServiceGroup({
                 <h2 id={headingId}>{group}</h2>
                 <span>{services.length}</span>
                 {editMode && canEdit === true && !isFavorites && groups.length > 1 && (
-                    <div
-                        className="bookmark-group-order-actions"
-                        onClick={event => event.stopPropagation()}
-                        onKeyDown={event => event.stopPropagation()}
-                    >
-                        <Button
-                            variant="plain"
-                            aria-label={`Move ${group} group up`}
-                            title="Move group up"
-                            isDisabled={groups[0] === group || saving}
-                            onClick={() => onMoveGroupWithinOrder(group, -1)}
-                        >
-                            ↑
-                        </Button>
-                        <Button
-                            variant="plain"
-                            aria-label={`Move ${group} group down`}
-                            title="Move group down"
-                            isDisabled={groups[groups.length - 1] === group || saving}
-                            onClick={() => onMoveGroupWithinOrder(group, 1)}
-                        >
-                            ↓
-                        </Button>
+                    <div className="bookmark-group-order-actions" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+                        <Button variant="plain" aria-label={`Move ${group} group up`} title="Move group up" isDisabled={groups[0] === group || saving} onClick={() => onMoveGroupWithinOrder(group, -1)}>↑</Button>
+                        <Button variant="plain" aria-label={`Move ${group} group down`} title="Move group down" isDisabled={groups[groups.length - 1] === group || saving} onClick={() => onMoveGroupWithinOrder(group, 1)}>↓</Button>
                     </div>
                 )}
             </div>
@@ -89,26 +73,27 @@ export function ServiceGroup({
                             .filter(({ item }) => serviceGroup(item) === serviceGroup(service))
                             .map(({ index }) => index);
                         const position = siblingIndexes.indexOf(service.sourceIndex);
-                        const canMoveUp = !isFavorites && position > 0;
-                        const canMoveDown = !isFavorites && position >= 0 && position < siblingIndexes.length - 1;
-
                         return (
                             <ServiceCard
                                 key={service.id || `${service.sourceIndex}-${service.resolvedUrl}`}
                                 service={service}
                                 status={statuses[serviceStatusKey(service)]}
+                                launcherState={launcherStates.get(service.id)}
                                 hostname={hostname}
                                 editMode={editMode}
                                 canEdit={canEdit}
                                 saving={saving}
                                 isFavorites={isFavorites}
-                                canMoveUp={canMoveUp}
-                                canMoveDown={canMoveDown}
+                                canMoveUp={!isFavorites && position > 0}
+                                canMoveDown={!isFavorites && position >= 0 && position < siblingIndexes.length - 1}
                                 selectedBookmark={selectedBookmark}
                                 dragSource={dragSource}
                                 compactMode={compactMode}
                                 onSelectService={onSelectService}
                                 onOpenService={onOpenService}
+                                onStopLauncher={onStopLauncher}
+                                onRestartLauncher={onRestartLauncher}
+                                onViewOutput={onViewOutput}
                                 onSetSelectedBookmark={onSetSelectedBookmark}
                                 onSetDragSource={onSetDragSource}
                                 onReorderBetween={onReorderBetween}

@@ -15,7 +15,8 @@ import {
     launcherUrl,
     parseLauncherArguments,
     validateLauncherDraft,
-} from '../src/gotty-launcher.js';
+    waitForLauncher,
+} from '../src/terminal-launcher.js';
 
 const BASE_DRAFT = {
     name: 'MC',
@@ -166,4 +167,26 @@ test('distinguishes loopback-safe and network-facing listen addresses', () => {
     assert.equal(isNetworkExposedAddress('0.0.0.0'), true);
     assert.equal(isNetworkExposedAddress('::'), true);
     assert.equal(isNetworkExposedAddress('192.168.1.20'), true);
+});
+
+test('readiness polling accepts an injected sleep so orchestration tests stay fast', async () => {
+    const service = buildLauncherService({ ...BASE_DRAFT, id: 'poll-test', port: '47233' });
+    let probes = 0;
+    const cockpit = {
+        spawn: async args => {
+            if (args[0] !== 'timeout')
+                throw new Error(`unexpected command ${args[0]}`);
+            probes += 1;
+            if (probes < 3)
+                throw new Error('not ready');
+            return '';
+        },
+    };
+    const sleeps = [];
+    const ready = await waitForLauncher(cockpit, service, 5, 123, '', async milliseconds => {
+        sleeps.push(milliseconds);
+    });
+    assert.equal(ready, true);
+    assert.equal(probes, 3);
+    assert.deepEqual(sleeps, [123, 123]);
 });

@@ -5,7 +5,10 @@ import {
     cleanLauncherText,
     formatArgumentLines,
     parseArgumentLines,
+    prepareLauncherOutput,
+    readLauncherOutput,
     readUserUnitJournal,
+    resolveExecutablePath,
     sleep,
     stopUserUnit,
     tcpPortListening,
@@ -14,7 +17,6 @@ import {
 } from './launcher-runtime.js';
 
 export const APPLICATION_LAUNCHER_TYPE = 'application-launcher';
-export const APPLICATION_LAUNCHER_EDIT_EVENT = 'cockpit-bookmarks:edit-application-launcher';
 export const APPLICATION_LAUNCHER_PATH_PREFIX = '/cb-app-';
 
 export const DEFAULT_APPLICATION_LAUNCHER = {
@@ -180,14 +182,18 @@ export function buildApplicationService(draft, original = null) {
     return service;
 }
 
+export function stripHostBrackets(value) {
+    return String(value || '').replace(/^\[|\]$/g, '');
+}
+
 export function expandApplicationTemplate(value, hostname, launcher) {
     return String(value || '')
-        .replaceAll('{host}', String(hostname || ''))
-        .replaceAll('{bind}', String(launcher?.bindHost || ''))
+        .replaceAll('{host}', stripHostBrackets(hostname))
+        .replaceAll('{bind}', stripHostBrackets(launcher?.bindHost || ''))
         .replaceAll('{port}', String(launcher?.port || ''));
 }
 
-export function buildApplicationSystemdRunArguments(service, hostname = '') {
+export function buildApplicationSystemdRunArguments(service, hostname = '', outputFile = '') {
     const launcher = normalizeApplicationLauncher(service?.applicationLauncher);
     const command = expandApplicationTemplate(launcher.command, hostname, launcher);
     const args = launcher.args.map(arg => expandApplicationTemplate(arg, hostname, launcher));
@@ -196,11 +202,18 @@ export function buildApplicationSystemdRunArguments(service, hostname = '') {
         runtimeSeconds: launcher.autoStopMinutes > 0 ? launcher.autoStopMinutes * 60 : 0,
         description: `Cockpit Bookmarks application: ${cleanLauncherText(service?.name) || command}`,
         command: [command, ...args],
+        outputFile,
     });
 }
 
-async function journalOutput(cockpit, service) {
-    return readUserUnitJournal(cockpit, applicationUnitName(service.id), 120);
+async function currentRunOutput(cockpit, service) {
+    const unit = applicationUnitName(service.id);
+    const output = await readLauncherOutput(cockpit, unit);
+    if (String(output || '').trim())
+        return output;
+    // Units created by older releases wrote to the journal, so retain a
+    // compatibility fallback while existing processes are still running.
+    return readUserUnitJournal(cockpit, unit, 120);
 }
 
 export function extractApplicationUrl(output, pattern = DEFAULT_APPLICATION_LAUNCHER.urlPattern) {
@@ -212,14 +225,14 @@ export function extractApplicationUrl(output, pattern = DEFAULT_APPLICATION_LAUN
         return null;
     }
     const matches = [...text.matchAll(regex)];
-    for (let index = matches.length - 1; index >= 0; index -= 1) {
-        const candidate = String(matches[index][1] || matches[index][0] || '').replace(/[),.;]+$/, '');
+    for (const match of matches) {
+        const candidate = String(match[1] || match[0] || '').replace(/[),.;]+$/, '');
         try {
             const parsed = new URL(candidate);
             if (parsed.protocol === 'http:' || parsed.protocol === 'https:')
                 return parsed.toString();
         } catch (_) {
-            // Try the previous match.
+            // Try the next match from this run.
         }
     }
     return null;
@@ -227,10 +240,12 @@ export function extractApplicationUrl(output, pattern = DEFAULT_APPLICATION_LAUN
 
 export function rewriteApplicationUrl(value, browserHostname) {
     const parsed = new URL(value);
-    const current = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    const current = stripHostBrackets(parsed.hostname).toLowerCase();
     const local = current === 'localhost' || current === '0.0.0.0' || current === '::' || current === '::1' || current.startsWith('127.');
-    if (local && browserHostname)
-        parsed.hostname = String(browserHostname).replace(/^\[|\]$/g, '');
+    if (local && browserHostname) {
+        const browserHost = stripHostBrackets(browserHostname);
+        parsed.hostname = browserHost.includes(':') ? `[${browserHost}]` : browserHost;
+    }
     return parsed.toString();
 }
 
@@ -252,7 +267,7 @@ export async function waitForApplicationUrl(cockpit, service, hostname = '') {
     const unit = applicationUnitName(service.id);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
         const commandOutput = await urlCommandOutput(cockpit, launcher, hostname);
-        const logOutput = commandOutput || await journalOutput(cockpit, service);
+        const logOutput = commandOutput || await currentRunOutput(cockpit, service);
         const url = extractApplicationUrl(logOutput, launcher.urlPattern);
         if (url)
             return rewriteApplicationUrl(url, hostname);
@@ -267,6 +282,27 @@ export async function waitForApplicationUrl(cockpit, service, hostname = '') {
 
 export async function stopApplicationLauncher(cockpit, service) {
     return stopUserUnit(cockpit, applicationUnitName(service.id));
+}
+
+async function runtimeApplicationService(cockpit, service, hostname) {
+    const launcher = normalizeApplicationLauncher(service.applicationLauncher);
+    const expandedCommand = expandApplicationTemplate(launcher.command, hostname, launcher);
+    const command = await resolveExecutablePath(cockpit, expandedCommand);
+    let urlCommand = launcher.urlCommand;
+    if (urlCommand) {
+        const expandedUrlCommand = expandApplicationTemplate(urlCommand, hostname, launcher);
+        urlCommand = expandedUrlCommand === expandedCommand
+            ? command
+            : await resolveExecutablePath(cockpit, expandedUrlCommand);
+    }
+    return {
+        ...service,
+        applicationLauncher: {
+            ...launcher,
+            command,
+            urlCommand,
+        },
+    };
 }
 
 export async function startApplicationLauncher(cockpit, service, hostname = '') {
@@ -301,11 +337,13 @@ export async function startApplicationLauncher(cockpit, service, hostname = '') 
     if (await tcpPortListening(cockpit, launcher.port))
         throw new Error(`TCP port ${launcher.port} is already in use by another service.`);
 
-    await cockpit.spawn(buildApplicationSystemdRunArguments(service, hostname), { err: 'message' });
-    const url = await waitForApplicationUrl(cockpit, service, hostname);
+    const runtimeService = await runtimeApplicationService(cockpit, service, hostname);
+    const outputFile = await prepareLauncherOutput(cockpit, unit);
+    await cockpit.spawn(buildApplicationSystemdRunArguments(runtimeService, hostname, outputFile), { err: 'message' });
+    const url = await waitForApplicationUrl(cockpit, runtimeService, hostname);
     if (!url) {
-        const logs = String(await journalOutput(cockpit, service) || '').trim().split(/\r?\n/).slice(-4).join(' | ');
-        await stopApplicationLauncher(cockpit, service).catch(() => {});
+        const logs = String(await currentRunOutput(cockpit, runtimeService) || '').trim().split(/\r?\n/).slice(-4).join(' | ');
+        await stopApplicationLauncher(cockpit, runtimeService).catch(() => {});
         throw new Error(`Application did not publish a usable browser URL${logs ? `: ${logs}` : '.'}`);
     }
     return { reused: false, url };

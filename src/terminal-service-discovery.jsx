@@ -7,9 +7,8 @@ import { storedBookmark } from './bookmarks.js';
 import { modifyConfiguration, readConfiguration } from './cockpit-config.js';
 import { buildDiscoveryCandidates, existingLocalBookmarkPorts, parseListeningSockets } from './discovery.js';
 import { CheckboxControl } from './form-controls.jsx';
-import { inspectGoTTYListenersSafely } from './gotty-inspect.js';
+import { inspectTerminalListenersSafely } from './terminal-inspect.js';
 import { applyTtydDiscoveryCandidates } from './ttyd-discovery.js';
-import { inspectTtydListenersSafely } from './ttyd-inspect.js';
 
 function candidateStatus(candidate) {
     if (candidate.alreadyBookmarked)
@@ -32,9 +31,9 @@ function storedDiscoveredBookmark(candidate) {
 
 function terminalInspectionText(candidate) {
     if (candidate.integration === 'gotty')
-        return `GoTTY terminal${candidate.gotty?.inspected ? ' · command line inspected' : ' · URL inference approximate'}`;
+        return `GoTTY terminal${candidate.gotty?.inspected ? ' · options inspected on host' : ' · URL inference approximate'}`;
     if (candidate.integration === 'ttyd')
-        return `ttyd terminal${candidate.ttyd?.inspected ? ' · command line inspected' : ' · URL inference approximate'}`;
+        return `ttyd terminal${candidate.ttyd?.inspected ? ' · options inspected on host' : ' · URL inference approximate'}`;
     return '';
 }
 
@@ -76,8 +75,8 @@ export function ServiceDiscovery({ visible = true, onOpenChange, inline = false 
             ]);
             const listeners = parseListeningSockets(output);
             const [gottyInfo, ttydInfo] = await Promise.all([
-                inspectGoTTYListenersSafely(window.cockpit, listeners, output),
-                inspectTtydListenersSafely(window.cockpit, listeners, output),
+                inspectTerminalListenersSafely(window.cockpit, 'gotty', listeners, output),
+                inspectTerminalListenersSafely(window.cockpit, 'ttyd', listeners, output),
             ]);
             const base = buildDiscoveryCandidates(listeners, config.services, hostname, gottyInfo);
             setCandidates(applyTtydDiscoveryCandidates(base, ttydInfo));
@@ -159,7 +158,7 @@ export function ServiceDiscovery({ visible = true, onOpenChange, inline = false 
                 <ModalBody>
                     <p className="bookmarks-discovery-intro">
                         This checks listening TCP sockets on the Cockpit host. It does not scan your LAN. HTTP/HTTPS is inferred,
-                        so review generated URLs before adding unfamiliar services. GoTTY and ttyd terminals receive process-aware checks when their PID is visible.
+                        so review generated URLs before adding unfamiliar services. GoTTY and ttyd terminals are reduced to security facts on the host; credential values and arbitrary process arguments are never sent to the browser.
                     </p>
 
                     {error && <Alert isInline variant="warning" title={error} />}
