@@ -7,6 +7,10 @@ import { AddAppManager } from './add-app-manager.jsx';
 import { useAdminPermission, useConfiguration } from './app-providers.jsx';
 import { CONFIG_PATH } from './bookmarks.js';
 import { BookmarkSections } from './bookmark-sections.jsx';
+import {
+    canRepairOversizedConfiguration,
+    repairOversizedConfigurationHistory,
+} from './cockpit-config.js';
 import { DashboardHeader } from './dashboard-header.jsx';
 import { EditToolbar } from './edit-toolbar.jsx';
 import { LauncherEditorDialog } from './launcher-editor-dialog.jsx';
@@ -35,6 +39,7 @@ export const Application = () => {
     const [outputTarget, setOutputTarget] = useState(null);
     const [outputText, setOutputText] = useState('');
     const [outputLoading, setOutputLoading] = useState(false);
+    const [repairingConfig, setRepairingConfig] = useState(false);
 
     const stopLauncher = async service => {
         try {
@@ -67,6 +72,23 @@ export const Application = () => {
             setOutputLoading(false);
         }
     };
+
+    const repairConfiguration = async () => {
+        setRepairingConfig(true);
+        try {
+            const result = await repairOversizedConfigurationHistory();
+            management.setNotice({
+                variant: 'success',
+                text: `Configuration repaired. Removed ${result.removedHistoryEntries} history entr${result.removedHistoryEntries === 1 ? 'y' : 'ies'}; bookmarks and page settings were kept.`,
+            });
+        } catch (error) {
+            management.setNotice({ variant: 'danger', text: `Could not repair ${CONFIG_PATH}: ${runtimeError(error)}` });
+        } finally {
+            setRepairingConfig(false);
+        }
+    };
+
+    const oversizedRepairAvailable = canEdit === true && canRepairOversizedConfiguration(configError);
 
     return (
         <Page className="pf-m-no-sidebar">
@@ -107,6 +129,15 @@ export const Application = () => {
                 <input ref={management.fileInputRef} className="bookmarks-file-input" type="file" accept="application/json,.json" onChange={management.handleImportFile} />
 
                 {management.notice && <Alert isInline variant={management.notice.variant} title={management.notice.text} className="bookmarks-notice" />}
+
+                {oversizedRepairAvailable && (
+                    <Alert isInline variant="warning" title="Configuration is too large to load normally" className="bookmarks-notice">
+                        <p>Bookmarks can attempt a one-time larger read and remove configuration history only. The repaired file must still fit the normal 1 MiB write limit.</p>
+                        <Button variant="secondary" onClick={repairConfiguration} isLoading={repairingConfig} isDisabled={repairingConfig}>
+                            Remove history and repair
+                        </Button>
+                    </Alert>
+                )}
 
                 {!loaded ? (
                     <div className="bookmarks-empty" role="status">Loading configuration…</div>
