@@ -80,7 +80,7 @@ function openPendingTab(openWindow, title, message) {
     return tab;
 }
 
-async function openTerminal(service, cockpit, hostname, openWindow) {
+async function openTerminal(service, cockpit, hostname, openWindow, startTerminal) {
     const tab = openPendingTab(
         openWindow,
         'Starting terminal…',
@@ -90,7 +90,7 @@ async function openTerminal(service, cockpit, hostname, openWindow) {
         return null;
 
     try {
-        await startTerminalLauncher(cockpit, service, hostname);
+        await startTerminal(cockpit, service, hostname);
         emitLauncherStateChanged(service);
         if (!tab.closed)
             tab.location.replace(expandUrl(service.url, hostname));
@@ -102,7 +102,7 @@ async function openTerminal(service, cockpit, hostname, openWindow) {
     }
 }
 
-async function openApplication(service, cockpit, hostname, openWindow) {
+async function openApplication(service, cockpit, hostname, openWindow, startApplication) {
     const tab = openPendingTab(
         openWindow,
         'Starting application…',
@@ -112,7 +112,7 @@ async function openApplication(service, cockpit, hostname, openWindow) {
         return null;
 
     try {
-        const result = await startApplicationLauncher(cockpit, service, hostname);
+        const result = await startApplication(cockpit, service, hostname);
         emitLauncherStateChanged(service);
         if (!tab.closed)
             tab.location.replace(result.url);
@@ -128,12 +128,14 @@ export function openService(service, {
     cockpit = window.cockpit,
     hostname = window.location.hostname,
     openWindow = window.open.bind(window),
+    startTerminal = startTerminalLauncher,
+    startApplication = startApplicationLauncher,
 } = {}) {
     const kind = serviceKind(service);
     if (kind === SERVICE_KIND_TERMINAL)
-        return openTerminal(service, cockpit, hostname, openWindow);
+        return openTerminal(service, cockpit, hostname, openWindow, startTerminal);
     if (kind === SERVICE_KIND_APPLICATION)
-        return openApplication(service, cockpit, hostname, openWindow);
+        return openApplication(service, cockpit, hostname, openWindow, startApplication);
 
     const url = service?.resolvedUrl || expandUrl(service?.url, hostname);
     if (service?.openMode === 'same-tab')
