@@ -17,7 +17,6 @@ import {
 } from './launcher-runtime.js';
 
 export const APPLICATION_LAUNCHER_TYPE = 'application-launcher';
-export const APPLICATION_LAUNCHER_EDIT_EVENT = 'cockpit-bookmarks:edit-application-launcher';
 export const APPLICATION_LAUNCHER_PATH_PREFIX = '/cb-app-';
 
 export const DEFAULT_APPLICATION_LAUNCHER = {
