@@ -1,5 +1,11 @@
 import { expandUrl } from './bookmarks.js';
 import {
+    agentOfEmpiresRunning,
+    isAgentOfEmpiresService,
+    startAgentOfEmpires,
+    stopAgentOfEmpires,
+} from './agent-of-empires.js';
+import {
     APPLICATION_LAUNCHER_TYPE,
     applicationUnitName,
     startApplicationLauncher,
@@ -34,8 +40,11 @@ export function serviceUnitName(service) {
     const kind = serviceKind(service);
     if (kind === SERVICE_KIND_TERMINAL)
         return launcherUnitName(service.id);
-    if (kind === SERVICE_KIND_APPLICATION)
+    if (kind === SERVICE_KIND_APPLICATION) {
+        if (isAgentOfEmpiresService(service))
+            return '';
         return applicationUnitName(service.id);
+    }
     return '';
 }
 
@@ -102,7 +111,7 @@ async function openTerminal(service, cockpit, hostname, openWindow, startTermina
     }
 }
 
-async function openApplication(service, cockpit, hostname, openWindow, startApplication) {
+async function openApplication(service, cockpit, hostname, openWindow, startApplication, startAoE) {
     const tab = openPendingTab(
         openWindow,
         'Starting application…',
@@ -112,7 +121,9 @@ async function openApplication(service, cockpit, hostname, openWindow, startAppl
         return null;
 
     try {
-        const result = await startApplication(cockpit, service, hostname);
+        const result = isAgentOfEmpiresService(service)
+            ? await startAoE(cockpit, service, hostname)
+            : await startApplication(cockpit, service, hostname);
         emitLauncherStateChanged(service);
         if (!tab.closed)
             tab.location.replace(result.url);
@@ -130,12 +141,13 @@ export function openService(service, {
     openWindow = window.open.bind(window),
     startTerminal = startTerminalLauncher,
     startApplication = startApplicationLauncher,
+    startAoE = startAgentOfEmpires,
 } = {}) {
     const kind = serviceKind(service);
     if (kind === SERVICE_KIND_TERMINAL)
         return openTerminal(service, cockpit, hostname, openWindow, startTerminal);
     if (kind === SERVICE_KIND_APPLICATION)
-        return openApplication(service, cockpit, hostname, openWindow, startApplication);
+        return openApplication(service, cockpit, hostname, openWindow, startApplication, startAoE);
 
     const url = service?.resolvedUrl || expandUrl(service?.url, hostname);
     if (service?.openMode === 'same-tab')
@@ -147,10 +159,14 @@ export async function stopService(service, cockpit = window.cockpit) {
     const kind = serviceKind(service);
     if (kind === SERVICE_KIND_TERMINAL)
         await stopTerminalLauncher(cockpit, service);
-    else if (kind === SERVICE_KIND_APPLICATION)
-        await stopApplicationLauncher(cockpit, service);
-    else
+    else if (kind === SERVICE_KIND_APPLICATION) {
+        if (isAgentOfEmpiresService(service))
+            await stopAgentOfEmpires(cockpit, service);
+        else
+            await stopApplicationLauncher(cockpit, service);
+    } else {
         return undefined;
+    }
     emitLauncherStateChanged(service);
     return undefined;
 }
@@ -165,7 +181,9 @@ export async function restartService(service, {
     const kind = serviceKind(service);
     const result = kind === SERVICE_KIND_TERMINAL
         ? await startTerminalLauncher(cockpit, service, hostname)
-        : await startApplicationLauncher(cockpit, service, hostname);
+        : isAgentOfEmpiresService(service)
+            ? await startAgentOfEmpires(cockpit, service, hostname)
+            : await startApplicationLauncher(cockpit, service, hostname);
     emitLauncherStateChanged(service);
     return result;
 }
@@ -206,22 +224,32 @@ export function parseLauncherStates(output) {
 export async function launcherStates(services, cockpit = window.cockpit) {
     const launchers = (services || []).filter(isLauncherService);
     const result = new Map(launchers.map(service => [service.id, 'stopped']));
-    const units = launchers.map(serviceUnitName).filter(Boolean);
-    if (!units.length || !cockpit?.spawn)
+    if (!launchers.length || !cockpit?.spawn)
         return result;
 
-    try {
-        const output = await cockpit.spawn([
-            'systemctl', '--user', 'show', '--property=Id', '--property=ActiveState', '--', ...units,
-        ], { err: 'ignore' });
-        const byUnit = parseLauncherStates(output);
-        for (const service of launchers) {
-            const state = byUnit.get(serviceUnitName(service));
-            if (state)
-                result.set(service.id, state);
+    const nativeAoE = launchers.filter(isAgentOfEmpiresService);
+    const systemdLaunchers = launchers.filter(service => !isAgentOfEmpiresService(service));
+    const units = systemdLaunchers.map(serviceUnitName).filter(Boolean);
+
+    if (units.length) {
+        try {
+            const output = await cockpit.spawn([
+                'systemctl', '--user', 'show', '--property=Id', '--property=ActiveState', '--', ...units,
+            ], { err: 'ignore' });
+            const byUnit = parseLauncherStates(output);
+            for (const service of systemdLaunchers) {
+                const state = byUnit.get(serviceUnitName(service));
+                if (state)
+                    result.set(service.id, state);
+            }
+        } catch (_) {
+            // Unknown/unloaded units are equivalent to stopped launchers here.
         }
-    } catch (_) {
-        // Unknown/unloaded units are equivalent to stopped launchers here.
     }
+
+    await Promise.all(nativeAoE.map(async service => {
+        if (await agentOfEmpiresRunning(cockpit, service))
+            result.set(service.id, 'running');
+    }));
     return result;
 }
