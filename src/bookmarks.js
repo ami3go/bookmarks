@@ -1,3 +1,5 @@
+import { randomUuidFromValues } from './secure-random-uuid.js';
+
 export const CONFIG_PATH = '/etc/cockpit/cockpit-bookmarks.json';
 export const MAX_CONFIG_SIZE = 1048576;
 export const HISTORY_LIMIT = 10;
@@ -224,8 +226,9 @@ export function normalizeConfig(config) {
 export function newBookmarkId() {
     if (globalThis.crypto?.randomUUID)
         return globalThis.crypto.randomUUID();
-
-    return `bookmark-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    if (globalThis.crypto?.getRandomValues)
+        return randomUuidFromValues(globalThis.crypto);
+    throw new Error('Secure random UUID generation is unavailable in this browser.');
 }
 
 function tagsArray(value) {
@@ -474,42 +477,27 @@ export function withHistory(current, next, action) {
 export function restoreHistoryEntry(current, entry) {
     if (!entry?.config || !Array.isArray(entry.config.services))
         throw new Error('This history entry is invalid.');
-
-    const services = JSON.parse(JSON.stringify(entry.config.services));
-    return {
-        ...normalizeConfig(current),
+    return normalizeConfig({
         ...entry.config,
-        showEyebrow: entry.config.showEyebrow !== false,
-        showHeader: entry.config.showHeader !== false,
-        showTitle: entry.config.showTitle !== false,
-        showSearch: entry.config.showSearch !== false,
-        displayMode: normalizeDisplayMode(entry.config.displayMode),
-        groupOrder: normalizeGroupOrder(services, entry.config.groupOrder),
-        services,
-        history: current.history,
-    };
+        history: Array.isArray(current.history) ? current.history : [],
+    });
 }
 
 export function normalizeImportedConfig(value, hostname) {
-    const config = normalizeConfig(value);
-
-    const services = config.services.map((service, index) => {
+    const normalized = normalizeConfig(value);
+    const services = normalized.services.map((service, index) => {
         if (!service || typeof service !== 'object')
             throw new Error(`Bookmark ${index + 1} must be an object.`);
-
         const draft = editableBookmark(service);
         const errors = validateBookmark(draft, hostname);
-        const firstError = Object.values(errors)[0];
-        if (firstError)
-            throw new Error(`Bookmark ${index + 1}: ${firstError}`);
-
+        if (Object.keys(errors).length)
+            throw new Error(`Bookmark ${index + 1}: ${Object.values(errors)[0]}`);
         return storedBookmark(draft, service);
     });
-
     return {
-        ...config,
-        groupOrder: normalizeGroupOrder(services, config.groupOrder),
+        ...normalized,
+        groupOrder: normalizeGroupOrder(services, normalized.groupOrder),
         services,
-        history: Array.isArray(config.history) ? config.history.slice(-HISTORY_LIMIT) : [],
+        history: [],
     };
 }
