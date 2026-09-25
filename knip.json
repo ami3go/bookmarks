@@ -1,0 +1,21 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.jsx",
+    "build.js",
+    "tests/*.test.mjs",
+    "tests-ui/*.test.jsx",
+    "tests-ui/run.mjs"
+  ],
+  "project": [
+    "src/**/*.{js,jsx}",
+    "tests/**/*.mjs",
+    "tests-ui/**/*.{js,jsx,mjs}",
+    "build.js"
+  ],
+  "ignore": [
+    "dist/**",
+    "release/**",
+    ".ui-test-tmp/**"
+  ]
+}
