@@ -18,7 +18,3 @@ export async function checkTerminalProviderCompatibilityCached(cockpit, provider
     }
     return compatibilityCache.get(key);
 }
-
-export function clearTerminalProviderCompatibilityCache() {
-    compatibilityCache.clear();
-}
