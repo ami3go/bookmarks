@@ -50,11 +50,11 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         hostname,
         query,
         setQuery,
-        groupFilter,
         setGroupFilter,
         groups,
         setDragSource,
     } = view;
+    const closePageSettings = pageSettings.close;
 
     const [notice, setNotice] = useState(null);
     const [editMode, setEditMode] = useState(false);
@@ -103,9 +103,9 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             setEditMode(false);
             setAddAppOpen(false);
             setLauncherEditorService(null);
-            pageSettings.close();
+            closePageSettings();
         }
-    }, [canEdit]);
+    }, [canEdit, closePageSettings]);
 
     useEffect(() => {
         if (!editMode) {
@@ -149,14 +149,14 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         modifyConfiguration(transform, action)
             .then(result => {
                 setSaving(false);
-                const trimmed = Number(result?.writeInfo?.historyTrimmed || 0);
+                const trimmed = result?.writeInfo?.historyTrimmed || 0;
                 setNotice({
-                    variant: 'success',
-                    text: trimmed > 0
-                        ? `${successText} ${trimmed} older history entr${trimmed === 1 ? 'y was' : 'ies were'} trimmed to keep the configuration within its size limit.`
+                    variant: trimmed ? 'warning' : 'success',
+                    text: trimmed
+                        ? `${successText} ${trimmed} oldest history entr${trimmed === 1 ? 'y was' : 'ies were'} removed to keep the configuration below ${MAX_CONFIG_SIZE.toLocaleString()} bytes.`
                         : successText,
                 });
-                onSuccess?.(result);
+                onSuccess?.();
             })
             .catch(error => {
                 setSaving(false);
@@ -199,7 +199,10 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         setLauncherEditorService(null);
         setDraft(editableBookmark(storedService));
         setFormErrors({});
-        setEditor({ mode: 'edit', target: { index: service.sourceIndex, service: storedService } });
+        setEditor({
+            mode: 'edit',
+            target: { index: service.sourceIndex, service: storedService },
+        });
     };
 
     const closeEditor = () => {
@@ -223,10 +226,13 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             return;
 
         if (editor.mode === 'add') {
-            modifyConfig(current => ({ ...current, services: [...current.services, storedBookmark(draft)] }),
-                'Bookmark added.', () => setEditor(null), `Added ${draft.name.trim()}`, 'editor');
+            modifyConfig(current => ({
+                ...current,
+                services: [...current.services, storedBookmark(draft)],
+            }), 'Bookmark added.', () => setEditor(null), `Added ${draft.name.trim()}`, 'editor');
             return;
         }
+
         if (!editMode)
             return;
 
@@ -234,6 +240,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             const index = findBookmarkIndex(current.services, editor.target);
             if (index === -1)
                 throw new Error('This bookmark was changed or removed. Reload the page and try again.');
+
             const updatedServices = [...current.services];
             updatedServices[index] = storedBookmark(draft, updatedServices[index]);
             return { ...current, services: updatedServices };
@@ -252,7 +259,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         setDeleteTarget({ index: service.sourceIndex, service: runtimeFreeService(service) });
     };
 
-    const deleteBookmark = async (deleteAnyway = false) => {
+    const deleteBookmark = async ({ force = false } = {}) => {
         if (!deleteTarget)
             return;
 
@@ -260,14 +267,14 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         setSaving(true);
         setNotice(null);
         try {
-            if (isLauncherService(deleteTarget.service) && !deleteAnyway) {
+            if (isLauncherService(deleteTarget.service) && !force) {
                 try {
                     await stopService(deleteTarget.service);
-                } catch (error) {
-                    const text = `Could not stop ${deleteTarget.service.name || 'launcher'}: ${cockpitMessage(error)}`;
+                } catch (stopError) {
+                    const text = `Could not stop ${deleteTarget.service.name || 'launcher'} before deleting it: ${cockpitMessage(stopError)}. You can retry, or explicitly choose Delete anyway.`;
+                    setNotice({ variant: 'danger', text });
+                    setWriteErrors(current => ({ ...current, delete: text }));
                     setDeleteStopFailed(true);
-                    setWriteErrors(current => ({ ...current, delete: `${text}. The bookmark has not been deleted.` }));
-                    setNotice({ variant: 'warning', text: `${text}. You can retry or choose Delete anyway.` });
                     return;
                 }
             }
@@ -276,7 +283,10 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
                 const index = findBookmarkIndex(current.services, deleteTarget);
                 if (index === -1)
                     throw new Error('This bookmark was changed or removed. Reload the page and try again.');
-                return { ...current, services: current.services.filter((_, serviceIndex) => serviceIndex !== index) };
+                return {
+                    ...current,
+                    services: current.services.filter((_, serviceIndex) => serviceIndex !== index),
+                };
             }, `Deleted ${deleteTarget.service?.name || 'bookmark'}`);
 
             setNotice({ variant: 'success', text: 'Bookmark deleted.' });
@@ -304,6 +314,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
     const moveBookmarkToGroup = () => {
         if (!moveTarget || !editMode)
             return;
+
         const destination = moveGroupDraft || 'Ungrouped';
         modifyConfig(current => {
             const index = findBookmarkIndex(current.services, moveTarget);
@@ -321,6 +332,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
     const toggleFavorite = service => {
         if (!editMode || canEdit !== true)
             return;
+
         const target = { index: service.sourceIndex, service: runtimeFreeService(service) };
         const nextFavorite = service.favorite !== true;
         modifyConfig(current => {
@@ -341,11 +353,12 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             setNotice({ variant: 'info', text: 'Use Add app to create another launcher so a new port and launcher URL can be allocated safely.' });
             return;
         }
+
         const target = { index: service.sourceIndex, service: runtimeFreeService(service) };
         modifyConfig(current => {
             const index = findBookmarkIndex(current.services, target);
             if (index === -1)
-                throw new Error('This bookmark was changed or removed. Reload and try again.');
+                throw new Error('This bookmark was changed or removed. Reload the page and try again.');
             const duplicate = duplicateBookmark(current.services[index], current.services);
             const updatedServices = [...current.services];
             updatedServices.splice(index + 1, 0, duplicate);
@@ -365,6 +378,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
             setNotice({ variant: 'warning', text: 'Drag-and-drop reordering is limited to bookmarks in the same group.' });
             return;
         }
+
         const sourceStored = runtimeFreeService(source);
         const targetStored = runtimeFreeService(target);
         modifyConfig(current => {
@@ -385,6 +399,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         const targetPosition = position + direction;
         if (position === -1 || targetPosition < 0 || targetPosition >= siblingIndexes.length)
             return;
+
         setSelectedBookmark(serviceSelectionKey(service));
         const targetIndex = siblingIndexes[targetPosition];
         reorderBetween(service, {
@@ -399,6 +414,7 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         const targetPosition = position + direction;
         if (position === -1 || targetPosition < 0 || targetPosition >= groups.length)
             return;
+
         modifyConfig(current => {
             const currentOrder = normalizeGroupOrder(current.services, current.groupOrder);
             return { ...current, groupOrder: moveGroup(currentOrder, group, direction) };
@@ -420,15 +436,13 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
 
     const submitSettings = event => {
         event.preventDefault();
-        if (!settingsDraft.title.trim()) {
+        const nextSettings = applyPageSettings(config, settingsDraft);
+        if (!String(nextSettings.title || '').trim()) {
             pageSettings.setError('Title is required.');
             return;
         }
-        modifyConfig(current => applyPageSettings(current, settingsDraft), 'Page settings updated.', () => {
-            if (!settingsDraft.showSearch)
-                setQuery('');
-            pageSettings.close();
-        }, 'Updated page settings', 'settings');
+
+        modifyConfig(current => applyPageSettings(current, settingsDraft), 'Page settings updated.', () => pageSettings.close(), 'Updated page settings', 'settings');
     };
 
     const exportConfig = () => {
@@ -448,10 +462,12 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
         event.target.value = '';
         if (!file)
             return;
+
         if (file.size > MAX_CONFIG_SIZE) {
             setNotice({ variant: 'danger', text: 'Import file is too large.' });
             return;
         }
+
         try {
             const parsed = JSON.parse(await file.text());
             clearWriteError('import');
@@ -464,13 +480,16 @@ export function useBookmarkManagement({ config, configError, configMissing, canE
     const confirmImport = () => {
         if (!importCandidate || !editMode)
             return;
-        modifyConfig(current => ({ ...importCandidate, history: current.history }),
-            `Imported ${importCandidate.services.length} bookmarks.`, () => {
-                setImportCandidate(null);
-                setQuery('');
-                setGroupFilter('all');
-                setSelectedBookmark(null);
-            }, 'Imported configuration', 'import');
+
+        modifyConfig(current => ({
+            ...importCandidate.config,
+            history: current.history,
+        }), `Imported ${importCandidate.config.services.length} bookmarks.`, () => {
+            setImportCandidate(null);
+            setQuery('');
+            setGroupFilter('all');
+            setSelectedBookmark(null);
+        }, 'Imported configuration', 'import');
     };
 
     const openHistory = () => {
