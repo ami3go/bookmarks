@@ -15,6 +15,8 @@ import {
     tcpPortReady,
     userUnitActive,
 } from './launcher-runtime.js';
+import { checkTerminalProviderCompatibilityCached } from './terminal-provider-compatibility-cache.js';
+import { terminalProviderCompatibilityMessage } from './terminal-provider-compatibility.js';
 
 // Keep the legacy type/path/unit names so existing GoTTY launcher bookmarks and
 // copied URLs remain valid. The provider field selects the actual terminal
@@ -325,6 +327,10 @@ export async function startTerminalLauncher(cockpit, service, hostname = '') {
     });
     if (Object.keys(errors).length)
         throw new Error(Object.values(errors)[0]);
+
+    const compatibility = await checkTerminalProviderCompatibilityCached(cockpit, launcher.provider, launcher.binary);
+    if (!compatibility.supported)
+        throw new Error(terminalProviderCompatibilityMessage(compatibility));
 
     const runtimeService = await runtimeTerminalService(cockpit, service, hostname);
     const runtimeLauncher = normalizeTerminalLauncher(runtimeService.gottyLauncher);
