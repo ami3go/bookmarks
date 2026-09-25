@@ -47,9 +47,6 @@ export const LAUNCHER_AUTO_STOP_OPTIONS = [
     { value: '480', label: '8h' },
 ];
 
-// Compatibility export for existing tests/imports.
-export const TERMINAL_AUTO_STOP_OPTIONS = LAUNCHER_AUTO_STOP_OPTIONS;
-
 function launcherAutoStopOptions(value, maxMinutes) {
     const current = String(value ?? '0');
     if (LAUNCHER_AUTO_STOP_OPTIONS.some(option => option.value === current))
