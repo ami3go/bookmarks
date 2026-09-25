@@ -135,21 +135,6 @@ export async function userUnitActive(cockpit, unit) {
     }
 }
 
-export async function userUnitState(cockpit, unit) {
-    try {
-        const output = cleanLauncherText(await cockpit.spawn([
-            'systemctl', '--user', 'show', '--property=ActiveState', '--value', '--', unit,
-        ], { err: 'ignore' }));
-        if (output === 'active')
-            return 'running';
-        if (output === 'failed')
-            return 'failed';
-        return 'stopped';
-    } catch (_) {
-        return 'stopped';
-    }
-}
-
 export async function stopUserUnit(cockpit, unit) {
     try {
         await cockpit.spawn(['systemctl', '--user', 'stop', unit], { err: 'message' });
