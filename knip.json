@@ -17,5 +17,6 @@
     "dist/**",
     "release/**",
     ".ui-test-tmp/**"
-  ]
+  ],
+  "ignoreExportsUsedInFile": true
 }
