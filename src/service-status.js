@@ -1,5 +1,3 @@
-export const SERVICE_STATES = ['online', 'offline', 'unknown'];
-
 export function socketTarget(url) {
     try {
         const parsed = new URL(String(url || ''));
