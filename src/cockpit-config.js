@@ -85,6 +85,13 @@ function isChangeConflict(error) {
     return problem === 'change-conflict' || /change-conflict/i.test(text);
 }
 
+export function canRepairOversizedConfiguration(error) {
+    const problem = String(error?.problem || error?.name || '').toLowerCase();
+    const text = String(error?.message || error || '').toLowerCase();
+    return problem === 'too-large' || problem === 'too_large' ||
+        /too large|max[_ -]?read[_ -]?size|read size|size limit|exceeds?.*size/.test(text);
+}
+
 export function watchConfiguration(onConfig, onError, onMissing) {
     const file = window.cockpit.file(CONFIG_PATH, {
         syntax: CONFIG_SYNTAX,
