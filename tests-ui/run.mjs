@@ -10,6 +10,7 @@ const outputDir = path.join(root, '.ui-test-tmp');
 const testEntries = [
     'components.test.jsx',
     'review-regressions.test.jsx',
+    'axe.test.jsx',
 ];
 
 await rm(outputDir, { recursive: true, force: true });
@@ -32,6 +33,7 @@ try {
                 'jsdom',
                 '@testing-library/react',
                 '@testing-library/dom',
+                'axe-core',
             ],
             platform: 'node',
             format: 'esm',
