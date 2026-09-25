@@ -6,6 +6,32 @@ The project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Unified **Applications** manager for terminal and web-application launchers, with Running/Stopped/Failed state, Stop, Restart, View output, Edit, and confirmed Delete actions.
+- Safe launcher-import review that lists executable commands, bind addresses, write capability, timeouts, and requires explicit command trust before importing launchers.
+- Oversized-configuration recovery that can perform one larger privileged read and remove history while preserving bookmarks and page settings.
+- Regression coverage for configuration conflicts/size recovery, host-side terminal inspection, launcher pending tabs/state, page-settings preview, collapsed groups, secure UUID fallback, and launcher execution paths.
+
+### Changed
+
+- Launcher commands remain human-readable in configuration and are resolved against the host `PATH` with `command -v` only when launched; existing absolute paths remain valid.
+- GoTTY/ttyd discovery now reduces process command lines to security facts on the host instead of returning redacted argv to the browser.
+- Application and terminal launcher output is captured per run in a private per-user runtime file, avoiding stale journal URLs and enabling View output.
+- Page-settings preview now uses React state instead of CSS `:has()` rules and previews hidden title/header/eyebrow, search visibility, and card density without prematurely clearing the saved search query.
+- Ordinary bookmark card titles are real browser links; launcher cards retain start-before-open button semantics. Arrow-key card navigation only activates when focus is already within the card grid.
+- Source builds default to production mode, while `make dev` and `make watch` explicitly use development mode. System installs replace stale compiled assets before copying the new build.
+- Configuration writes use optimistic file tags with bounded conflict retries and enforce the 1 MiB write budget by trimming oldest history first.
+
+### Fixed
+
+- Exceptions thrown by configuration transforms now reject the write instead of leaving the UI pending indefinitely.
+- Imported files are migrated through the schema boundary before validation; future schema versions are rejected rather than silently restamped.
+- ttyd/GoTTY discovery correctly handles credential option spellings and ttyd option grammar without exposing credential values to the browser.
+- Launcher bind/URL handling now supports IPv6 literals and resolves ttyd hostname bindings on the host.
+- Collapsed-group state is no longer erased by the placeholder configuration before the real file finishes loading.
+- Bookmark/launcher IDs use cryptographically secure UUID generation even when `crypto.randomUUID()` is unavailable.
+
 ## [0.7.1] - 2026-09-17
 
 ### Changed
@@ -93,7 +119,7 @@ The project follows semantic versioning where practical.
 - Favorites / pinned bookmarks with a top Favorites section.
 - Keyboard navigation: `/` focuses search, arrow keys move across visible cards, Enter activates, and Esc clears search.
 - Per-bookmark opening behavior: new tab or same tab.
-- Duplicate bookmark action with fresh IDs and collision-free copy names.
+- Duplicate bookmark action with fresh IDs and collision-free copy name.
 - Move to group action from the card menu.
 - Live configuration reload through Cockpit's file watch API.
 - Modal-local write errors for editor, move, delete, settings, import, and history actions.
@@ -107,7 +133,7 @@ The project follows semantic versioning where practical.
 - Group section order is independent of bookmark order while remaining backward compatible with v0.4 configurations.
 - Search temporarily exposes matches inside collapsed groups.
 - Favorite bookmarks remain visible in their original group in addition to the Favorites section.
-- Discovered bookmarks are added under the `Discovered` group in one privileged atomic update/history snapshot.
+- Discovered bookmarks are added under the `Discovered` group in one privileged atomic config update/history snapshot.
 - Discovery no longer treats generic TCP port 9100 as web by port number alone; web-like process detection is required before it is recommended.
 - Discovery evaluates every reported process sharing a listening port before deciding whether it is safe to recommend.
 - Stable bookmark IDs are authoritative mutation targets; if an externally changed bookmark ID disappears, edit/delete/move actions fail safely instead of falling back to a lookalike bookmark.
