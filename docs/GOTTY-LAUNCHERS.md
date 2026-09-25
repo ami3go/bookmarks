@@ -1,19 +1,21 @@
 # On-demand terminal launchers: GoTTY and ttyd
 
-Cockpit Bookmarks can define launcher bookmarks that start a terminal application only when the bookmark is clicked. Each launcher can use either **GoTTY** or **ttyd** as its web-terminal server.
+Cockpit Bookmarks can define terminal launcher bookmarks that start an application only when the launcher is opened. A launcher uses either **GoTTY** or **ttyd** as its web-terminal server, wrapped in a transient per-user systemd service.
 
-Examples include MC (`mc`), btop (`btop`), Fish (`fish`), or another executable. The launcher opens a new browser tab immediately, starts a transient user service through `systemd-run --user`, waits for the configured TCP port, and then redirects the tab to the terminal.
+Examples include MC (`mc`), btop (`btop`), Fish (`fish`), or another executable.
 
-## Choosing a terminal server
+## Persisted compatibility
 
-The launcher editor has a **Terminal server** field:
+Existing launcher identities remain compatible:
 
-- **GoTTY** — preserves the existing launcher behavior and command line.
-- **ttyd** — uses ttyd's `--interface`, `--port`, `--writable`, and `--base-path` options.
+- persisted type: `gotty-launcher`
+- URL path: `/cb-gotty-<id>/`
+- user-unit prefix: `cockpit-bookmarks-gotty-`
+- missing `provider` means GoTTY
 
-Existing saved launchers do not require migration. The historical bookmark type remains `gotty-launcher`, the URL path remains `/cb-gotty-<id>/`, and a launcher without a `provider` field is interpreted as GoTTY. This keeps old bookmarks, copied URLs, and systemd unit identities stable.
+New launcher creation lives in **Add app**. Runtime state and actions for both terminal and web-application launchers live in the unified **Applications** manager and card action menus.
 
-A new launcher stores provider metadata inside the existing launcher object, for example:
+A terminal launcher stores data similar to:
 
 ```json
 {
@@ -28,32 +30,53 @@ A new launcher stores provider metadata inside the existing launcher object, for
     "command": "mc",
     "args": [],
     "port": 47200,
-    "address": "127.0.0.1",
-    "autoStopMinutes": 30
+    "address": "{host}",
+    "autoStopMinutes": 0
   }
 }
 ```
 
-## Version and fork compatibility
+`autoStopMinutes: 0` means **No timeout** and omits `RuntimeMaxSec`. Positive timeout values add the corresponding systemd runtime limit.
 
-Cockpit Bookmarks checks every configured terminal-server executable using both `--version` and `--help`. This is intentionally stricter than trusting the version string alone because old or incompatible forks may report a plausible version while missing command-line options required by the launcher.
+## Current defaults and security
 
-The minimum supported versions are:
+Current v0.7 terminal presets intentionally retain their existing behavior:
 
-- **GoTTY 1.2.0 or newer** — the launcher requires `--address`, `--port`, `--permit-write`, and `--path`. Legacy GoTTY releases and forks without `--path` are unsupported.
-- **ttyd 1.7.4 or newer** — the launcher requires `--interface`, `--port`, `--writable`, and `--base-path`. Older ttyd builds using the historical `--readonly` behavior are unsupported.
+- listen address: `{host}`
+- interactive input enabled (`--permit-write` / `--writable`)
+- auto-stop: **No timeout**
+- plain HTTP unless TLS/authentication is provided separately by the terminal-server deployment
 
-When a configured binary is too old, cannot be executed, or is missing one of the required options, the dashboard displays a danger alert explaining the detected version and the missing compatibility requirement. If a custom build does not expose a parseable semantic version but does provide every required option, Bookmarks treats it as capability-compatible and displays a warning that the exact version could not be verified.
+These defaults can expose an interactive shell beyond loopback depending on how Cockpit was reached, routing, and firewall policy. Review the listen address and security controls before starting a terminal launcher. See `SECURITY.md`.
 
-## Launcher parameters
+## Executables and PATH
 
-The manager and card editor expose bookmark name, terminal server, terminal-server executable, application command, application arguments, TCP port, listen address, auto-stop time, group, icon, and accent. Application command, arguments, and listen address continue to support the `{host}` placeholder.
+The configured provider binary and application command are stored exactly as entered. At launch time, a name without `/` is resolved with the logged-in user's host `PATH` using `command -v`. Absolute paths saved by older versions remain valid.
 
-New launchers automatically choose the first unused port in **47200–47299**, skipping configured launcher ports and ports already listening on the host. Custom unprivileged ports are still supported.
+This avoids freezing a `whereis` result into configuration and respects normal PATH precedence such as `/usr/local/bin` before `/usr/bin`.
+
+## Provider compatibility
+
+Compatibility probes no longer run automatically for every configured launcher on every page view.
+
+When a user explicitly starts a terminal launcher, Cockpit Bookmarks checks the selected provider executable with `--version` and `--help`. Results are cached for the browser session by provider/binary pair.
+
+The required CLI contracts are:
+
+- **GoTTY 1.2.0+**: `--address`, `--port`, `--permit-write`, `--path`
+- **ttyd 1.7.4+**: `--interface`, `--port`, `--writable`, `--base-path`
+
+A custom build with no parseable semantic version can still be accepted if it exposes every required option. A missing/old/incompatible provider stops the explicit launch with an actionable error.
+
+## Ports and bind addresses
+
+New terminal launchers choose the first unused port in **47200–47299**, skipping ports already assigned to launcher bookmarks or already listening on the host.
+
+`{host}` is expanded at start time. IPv6 brackets are removed when an address is passed to a bind option. For ttyd, a hostname bind value is resolved on the host with `getent ahosts`; if resolution fails, launch stops with a message requesting an IP address or `127.0.0.1`.
 
 ## Runtime commands
 
-GoTTY launchers use the established form:
+GoTTY launchers use:
 
 ```text
 gotty --address <address> --port <port> --permit-write \
@@ -61,7 +84,7 @@ gotty --address <address> --port <port> --permit-write \
   <application> <arg1> <arg2> ...
 ```
 
-ttyd launchers use the equivalent ttyd form:
+ttyd launchers use:
 
 ```text
 ttyd --interface <address> --port <port> --writable \
@@ -69,28 +92,31 @@ ttyd --interface <address> --port <port> --writable \
   <application> <arg1> <arg2> ...
 ```
 
-Both commands are wrapped by the same transient `systemd-run --user` service with `RuntimeMaxSec` and `KillMode=control-group`. Application arguments are passed as separate argv values; Bookmarks does not construct a shell command.
+Arguments are passed as separate argv entries; Cockpit Bookmarks does not concatenate them into a shell command.
 
-If the launcher user service is already active and the configured port responds, it is reused. If another process already owns the port, launch is refused instead of opening an unrelated service.
+If the user unit is active and its port responds, the existing launcher is reused. If another process owns the configured port, launch is refused.
 
-## Service discovery
+## State, stopping, and output
 
-**Discover services** recognizes both GoTTY and ttyd listeners. When the process PID is visible, Bookmarks inspects command-line options to infer TLS, writable/read-only mode, authentication presence, and base path.
+Launcher cards and the Applications manager show **Running**, **Stopped**, or **Failed** state from the user's systemd manager. Stop and Restart are available outside Edit mode because the user who started the per-user unit should also be able to control it.
 
-Basic-auth credential values are redacted on the host before process arguments cross the Cockpit spawn boundary. Bookmarks records only that authentication is present; it does not store the credential value.
+Launcher output is captured per run in a private file below `/run/user/<uid>/cockpit-bookmarks/`. **View output** reads a bounded tail of that file. A terminal start that fails readiness includes the final output lines in its error when available.
 
-GoTTY random-URL mode remains deliberately excluded from automatic bookmark creation because the generated secret path cannot be reconstructed safely.
+Deleting a launcher asks for confirmation and tries to stop the unit first. If stopping fails, the error is shown and the UI offers an explicit **Delete anyway** choice instead of silently leaving a unit behind.
 
-## Security
+## Discovery
 
-Launchers run as the **logged-in Cockpit user**, never as root. On-demand launchers enable interactive input (`--permit-write` for GoTTY, `--writable` for ttyd) because terminal applications need keyboard input.
+**Discover services** recognizes GoTTY and ttyd listeners. When the process PID is visible, a host-side parser reads `/proc/<pid>/cmdline`, reduces it to non-secret facts, and sends only those facts to the browser:
 
-The default listen address is `127.0.0.1`. A browser on another machine normally needs a reachable LAN/VPN address such as `0.0.0.0`, `::`, or a specific interface address. A writable web terminal is sensitive: expose it only on a trusted network or behind suitable firewall/reverse-proxy authentication and TLS controls.
+- TLS enabled
+- writable/read-only state
+- authentication present
+- random URL mode (GoTTY)
+- base path
+- whether unknown options make inference approximate
 
-On-demand launchers do not persist terminal-server credentials and currently start plain HTTP unless you run a separately managed hardened deployment.
+Credential values and arbitrary process argv never cross the Cockpit spawn boundary. GoTTY random-URL mode is not auto-added because the generated secret path is not reconstructed.
 
 ## Requirements
 
-The host needs either `gotty` or `ttyd` available to the logged-in user, plus the configured terminal application, a working systemd user manager, and `bash`, `timeout`, and `ss` for readiness and port checks.
-
-An absolute path to the terminal-server executable can be configured when it is not present on the systemd user manager's PATH.
+The host needs the configured `gotty` or `ttyd` executable, the launched application, a working systemd user manager, `bash`, `ss`, and the utilities used by readiness/provider checks. Hostname binding for ttyd additionally uses `getent`.
