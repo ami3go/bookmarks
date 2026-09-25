@@ -1,183 +1,120 @@
 # Cockpit Bookmarks
 
-A lightweight Cockpit extension for organizing and launching web services hosted on a mini PC or server.
+Cockpit Bookmarks is a lightweight Cockpit extension for organizing web services and launching optional on-demand applications on a mini PC or server.
 
-Cockpit Bookmarks stays small at runtime:
-
-- no Docker
-- no daemon or background service
-- no database
-- no Node.js process after installation
-- no Python runtime
-
-React, PatternFly, Node.js, and esbuild are build-time dependencies only. The installed application is static HTML/CSS/JavaScript served by Cockpit.
+The installed UI is static HTML/CSS/JavaScript served by Cockpit. It has no database and no always-on application daemon of its own. Optional terminal and application launchers create transient **per-user systemd services** only when a user starts them.
 
 ## Features
 
 ### Browse
 
-- Cockpit-style React + PatternFly 6 interface
-- follows Cockpit light/dark theme
+- React + PatternFly 6 Cockpit UI with light/dark theme support
 - standard or compact card density
-- responsive grouped card layout
-- collapsible groups with browser-local collapse state
-- Favorites section for pinned bookmarks
-- search by name, description, group, URL, or tags
-- filter by group
-- optional header, title, and search bar visibility
-- keyboard shortcuts: `/` focuses search, arrow keys move between visible cards, `Enter` opens/selects, `Esc` clears search
-- per-bookmark open behavior: new tab or same tab, with new tab as the default
-- multiple addresses per bookmark with a selectable primary/LAN/remote endpoint
-- host-side service reachability indicators plus an online/offline/unknown summary
-- user card menu with Open in new tab, Copy URL, and locally generated QR code
-- expanded icon presets and optional card accent presets
-- `{host}` substitution for the Cockpit host name/IP address
+- grouped and collapsible bookmarks with browser-local collapse state
+- Favorites section
+- search and group filtering
+- optional eyebrow/header/title/search visibility
+- real browser links for normal bookmarks, including native middle-click/context-menu behavior
+- selectable alternate addresses per bookmark
+- `{host}` substitution for the hostname/IP used to open Cockpit
+- host-side reachability status with online/offline/unknown summary
+- Copy URL and locally generated QR code actions
+
+Keyboard shortcuts are intentionally scoped: `/` focuses search, `Esc` clears search, and arrow-key card navigation is used only while focus is already inside the card grid so normal page scrolling is not stolen.
 
 ### Manage
 
-Administrators can manage bookmarks directly from Cockpit:
+Administrators can enable the pencil **Edit mode** to:
 
-- add and edit bookmarks
-- delete with confirmation
-- pencil **Edit mode** keeps management controls hidden by default
-- edit mode automatically locks after two minutes of inactivity
-- configure header, title, and search-bar visibility from Page settings
-- compact floating three-dot card action menu
-- reorder bookmarks with drag-and-drop or Move up / Move down
-- explicitly reorder groups
-- move a bookmark to another group
-- duplicate bookmarks with a fresh ID and collision-free name
-- add/remove Favorites
-- choose emoji/text icons
-- add searchable tags
-- duplicate name and URL warnings
-- resolved `{host}` URL preview while editing
-- modal-local write errors when a save operation fails
+- add, edit, move, reorder, duplicate, favorite, and delete bookmarks
+- configure page text, visibility, and card density with live preview
+- import/export JSON configuration
+- restore configuration history
+- discover local TCP services
+- add and edit terminal/application launchers
+- use the unified **Applications** manager for launcher state, Stop, View output, Edit, and confirmed Delete
+
+Edit mode locks automatically after two minutes of inactivity when no management dialog is open.
+
+### On-demand applications
+
+**Add app** supports:
+
+- Custom web applications
+- Agent of Empires
+- GoTTY terminals
+- ttyd terminals
+- terminal presets for MC, btop, and Fish
+
+Launcher commands are stored as entered. At launch time, names without `/` are resolved against the host user's real `PATH` with `command -v`; absolute paths remain unchanged.
+
+Launcher state is read from the user's systemd manager and shown as Running, Stopped, or Failed. Stop/Restart/View output are available from launcher card menus. Output is captured per run in a private directory under `/run/user/<uid>/cockpit-bookmarks/` rather than relying on journal visibility.
+
+Terminal launchers are powerful remote-shell endpoints. Review their listen address, terminal-server authentication, writable mode, and auto-stop setting before starting them. Current terminal presets retain the v0.7 behavior: they bind to `{host}`, are writable, and default to **No timeout**. See [SECURITY.md](SECURITY.md) and [docs/GOTTY-LAUNCHERS.md](docs/GOTTY-LAUNCHERS.md).
 
 ### Discover services
 
-While Edit mode is enabled, administrators can use **Discover services** to inspect TCP listeners on the Cockpit host.
+**Discover services** inspects listening TCP sockets on the Cockpit host with `ss -H -ltnp`. It does not scan the LAN.
 
 Discovery:
 
-- runs `ss -H -ltnp` through Cockpit's host bridge
-- scans only the local host; it does not scan the LAN
 - groups duplicate IPv4/IPv6 listeners by port
-- shows detected port, bind addresses, and process name when available
-- recognizes common web-service ports/processes
-- excludes known non-web/system listeners from automatic selection
-- excludes Cockpit itself when identifiable
-- marks loopback-only listeners because they may not be reachable from a remote browser
-- avoids auto-adding ports already represented by local bookmarks
-- shows a review dialog before writing anything
-- adds selected services in one privileged atomic config update and one history snapshot
+- recognizes common web services and known non-web/system listeners
+- marks loopback-only listeners
+- avoids obvious duplicate local bookmark ports
+- provides process-aware GoTTY/ttyd handling when the process PID is visible
+- requires confirmation before writing bookmarks
 
-HTTP/HTTPS detection is intentionally conservative. Unknown protocols are not selected automatically, and unusual TLS ports may need manual correction after discovery.
+GoTTY/ttyd process inspection runs on the host. The inspector parses `/proc/<pid>/cmdline` there and returns only derived facts such as TLS, write access, authentication presence, random URL/read-only flags, and base path. Credential values and arbitrary argv are not sent to the browser.
 
-### Page and configuration
+## Configuration
 
-- edit page title, subtitle, and eyebrow text
-- optionally hide the eyebrow
-- independently show/hide header text, title, or search bar
-- standard / compact display density
-- explicit `groupOrder`
-- live reload when `/etc/cockpit/cockpit-bookmarks.json` changes externally
-- import JSON configuration with validation and confirmation
-- export the complete current configuration as JSON
-- automatic configuration history before every change
-- restore one of the 10 most recent configuration snapshots
-- administrator-only privileged writes
-- atomic JSON updates through Cockpit's `cockpit.file().modify()` API
-- existing v0.4 configurations and bookmarks without IDs remain compatible
+The shared configuration is:
 
-## Installation guide
+```text
+/etc/cockpit/cockpit-bookmarks.json
+```
+
+Writes require Cockpit administrator privileges. Configuration changes use optimistic file tags and bounded retries so concurrent modifications do not silently overwrite one another.
+
+The normal write budget is 1 MiB. Oldest history snapshots are trimmed first when necessary. Reads allow a larger recovery margin, and an administrator can use **Remove history and repair** if a configuration has already grown beyond the normal read ceiling but can be repaired by dropping history.
+
+Imports pass through the same schema migration and launcher validation boundary as normal configuration. Imports containing launchers list the executable configuration and require an explicit trust confirmation before they are accepted. Files from a future unsupported schema version are rejected.
+
+## Installation
 
 ### Requirements
 
-Cockpit Bookmarks is designed to be installed on the same Linux host that runs Cockpit.
+Every installation requires:
 
-Required for every installation:
+- Cockpit
+- administrator or `sudo` access for system-wide installation
+- a modern browser
 
-- Cockpit installed and working
-- administrator or `sudo` access for a system-wide install and initial configuration
-- a modern browser for the Cockpit web interface
+Prebuilt releases and Debian packages do **not** require Node.js on the target host. Source builds require Node.js 18+, npm, and GNU Make. Service discovery additionally needs `ss` from `iproute2`.
 
-For **prebuilt releases and Debian packages**, Node.js and npm are **not required** on the target server.
+### Debian/Ubuntu package
 
-For a **source build**, install:
-
-- Node.js 18 or newer
-- npm
-- GNU Make
-
-The optional **Discover services** feature also requires the `ss` command, normally provided by the `iproute2` package. The Debian package recommends `iproute2` automatically.
-
-### Recommended on Debian/Ubuntu: install the `.deb` package
-
-Download these files from the matching GitHub release:
-
-- `cockpit-bookmarks_<version>-<revision>_all.deb`
-- `cockpit-bookmarks_<version>-<revision>_all.deb.sha256`
-
-For v0.5.0 the first Debian packaging revision is `cockpit-bookmarks_0.5.0-1_all.deb`.
-
-Optionally calculate the checksum and compare it with the value in the `.sha256` file:
+Download the matching `.deb` and checksum from a GitHub release, verify if desired, then install with:
 
 ```bash
 sha256sum cockpit-bookmarks_<version>-<revision>_all.deb
-```
-
-Install with `apt` so package dependencies are resolved automatically:
-
-```bash
 sudo apt install ./cockpit-bookmarks_<version>-<revision>_all.deb
 ```
 
-The Debian package:
+The package installs the Cockpit UI under `/usr/share/cockpit/cockpit-bookmarks/` and creates `/etc/cockpit/cockpit-bookmarks.json` only if it does not already exist. Existing configuration is preserved across upgrades and normal removal.
 
-- installs the Cockpit files under `/usr/share/cockpit/cockpit-bookmarks/`
-- creates `/etc/cockpit/cockpit-bookmarks.json` only when it does not already exist
-- migrates `/etc/cockpit/local-services.json` when the old file exists and the new config does not
-- preserves the JSON configuration across upgrades, reinstalls, and normal package removal
-- requires no Node.js or npm at runtime or install time
-
-Reload the Cockpit web interface after installation. **Bookmarks** should appear under **Tools**. If the page was already open, sign out and back in if a normal browser refresh does not show it.
-
-### Alternative: install a prebuilt release tarball
-
-This method is useful on non-Debian distributions or when you prefer the Makefile installer. The release archive already contains the compiled `dist/` files.
-
-1. Download these files from the matching GitHub release:
-
-   - `cockpit-bookmarks-<version>.tar.gz`
-   - `cockpit-bookmarks-<version>.tar.gz.sha256`
-
-2. Optionally calculate the archive checksum and compare it with the value in the `.sha256` file:
-
-```bash
-sha256sum cockpit-bookmarks-<version>.tar.gz
-```
-
-3. Extract the release:
+### Prebuilt release tarball
 
 ```bash
 tar -xzf cockpit-bookmarks-<version>.tar.gz
 cd cockpit-bookmarks-<version>
-```
-
-4. Install the compiled Cockpit package and create the configuration if it does not already exist:
-
-```bash
 sudo make install-prebuilt install-config
 ```
 
-5. Reload the Cockpit web interface. **Bookmarks** should appear under **Tools**. If the page was already open during installation, sign out and back in if a normal browser refresh does not show it.
-
-`install-config` is safe to run again. It keeps an existing `/etc/cockpit/cockpit-bookmarks.json` unchanged. If the old `/etc/cockpit/local-services.json` exists and the new configuration does not, the installer migrates the old file automatically.
+The Makefile install path is `/usr/local/share/cockpit/cockpit-bookmarks/`.
 
 ### Install from source
-
-Use this method when developing the project or installing directly from a source checkout.
 
 ```bash
 npm ci
@@ -186,61 +123,39 @@ make
 sudo make install install-config
 ```
 
-The build uses the committed `package-lock.json` and produces the compiled Cockpit package in `dist/` before installation.
+`make` now builds **production** assets by default. It removes the old installed Cockpit directory before copying the new build so stale hashed/static assets do not accumulate.
 
-### Development install
+For a one-off development bundle use:
 
-For development, build the application and symlink `dist/` into the current user's Cockpit package directory:
+```bash
+make dev
+```
+
+For a development symlink and watcher:
 
 ```bash
 make devel-install
 sudo make install-config
-```
-
-After changing source files, rebuild with:
-
-```bash
-make
-```
-
-Or run the development watcher:
-
-```bash
 make watch
 ```
 
-Remove the development symlink with:
+`make dev`, `make devel-install`, and `make watch` explicitly use development mode.
 
-```bash
-make devel-uninstall
-```
+### Update
 
-### Update an existing installation
-
-#### Update a Debian/Ubuntu package
-
-Download the newer `.deb` and install it with `apt`:
+Debian/Ubuntu:
 
 ```bash
 sudo apt install ./cockpit-bookmarks_<new-version>-<revision>_all.deb
 ```
 
-The package files are upgraded while `/etc/cockpit/cockpit-bookmarks.json` is preserved.
-
-#### Update from a prebuilt release tarball
-
-Download and extract the newer release, then run:
+Prebuilt tarball:
 
 ```bash
-cd cockpit-bookmarks-<new-version>
 sudo make install-prebuilt install-config
 ```
 
-The package files are replaced while the existing JSON configuration is preserved.
-
-#### Update a source installation
-
-From the source checkout:
+Source checkout:
 
 ```bash
 git pull --ff-only
@@ -251,191 +166,75 @@ make
 sudo make install
 ```
 
-There is normally no need to run `install-config` during an update because the existing configuration remains in `/etc/cockpit/cockpit-bookmarks.json`.
-
-### Installation paths
-
-The Debian package installs Cockpit files at:
-
-```text
-/usr/share/cockpit/cockpit-bookmarks/
-```
-
-The Makefile system installer uses:
-
-```text
-/usr/local/share/cockpit/cockpit-bookmarks/
-```
-
-Both installation methods use the shared configuration:
-
-```text
-/etc/cockpit/cockpit-bookmarks.json
-```
-
-The runtime consists only of the compiled static Cockpit package plus this JSON configuration. Node.js, npm, source files, tests, and `node_modules/` are not required after a Debian or prebuilt installation.
-
 ### Uninstall
 
-For a Debian/Ubuntu installation, remove the package while keeping the bookmarks configuration with:
+Debian package, preserving configuration:
 
 ```bash
 sudo apt remove cockpit-bookmarks
 ```
 
-To remove both the package and `/etc/cockpit/cockpit-bookmarks.json`:
+Purge package and configuration:
 
 ```bash
 sudo apt purge cockpit-bookmarks
 ```
 
-For a Makefile installation, from an extracted release or source checkout run:
+Makefile installation:
 
 ```bash
 sudo make uninstall
 ```
 
-This removes the Cockpit package but deliberately **keeps the configuration file** so bookmarks are not lost.
+The Makefile uninstall deliberately keeps `/etc/cockpit/cockpit-bookmarks.json`.
 
-To remove the configuration from a Makefile installation as well, back it up first if needed and delete it explicitly:
+## Build and test
 
-```bash
-sudo cp /etc/cockpit/cockpit-bookmarks.json ~/cockpit-bookmarks-backup.json
-sudo rm /etc/cockpit/cockpit-bookmarks.json
-```
-
-### Reinstall or repair
-
-For a Debian/Ubuntu installation:
-
-```bash
-sudo apt install --reinstall ./cockpit-bookmarks_<version>-<revision>_all.deb
-```
-
-For a prebuilt tarball, reinstalling does not overwrite an existing configuration:
-
-```bash
-sudo make install-prebuilt install-config
-```
-
-For a source checkout use:
-
-```bash
-make clean
-make
-sudo make install install-config
-```
-
-## Build from source
-
-Dependencies are locked in `package-lock.json` and installed reproducibly with npm:
+Install dependencies and run all unit/UI regression tests:
 
 ```bash
 npm ci
 npm test
-NODE_ENV=production make clean all
 ```
 
-The build produces the compiled Cockpit package in `dist/`.
-
-## Create release artifacts
-
-Build the production tarball and Debian package together with:
+Production build:
 
 ```bash
-npm ci
-npm test
+make clean all
+```
+
+Development build:
+
+```bash
+make dev
+```
+
+Release archive and Debian package:
+
+```bash
 make release-all
 ```
 
-This produces:
+Expected artifacts:
 
 ```text
 release/cockpit-bookmarks-<version>.tar.gz
-release/cockpit-bookmarks_<version>-1_all.deb
+release/cockpit-bookmarks_<version>-<revision>_all.deb
 ```
 
-The archive includes the compiled Cockpit package, example configuration, Debian packaging definitions, installer Makefile, README, roadmap, changelog, security policy, and license.
+CI also validates recursive rebuilds, watch-mode static refresh, production source maps, release contents, Node-free prebuilt installation, uninstall/reinstall configuration preservation, and Debian package behavior.
 
-Build only the Debian package from a source checkout with:
+## Update notifications
 
-```bash
-make deb
-```
-
-An extracted prebuilt release tarball can rebuild the `.deb` without Node.js:
-
-```bash
-make deb-prebuilt
-```
-
-`dpkg-deb` is required on the machine doing the Debian package build.
-
-## Continuous integration
-
-GitHub Actions runs on pull requests and pushes to `main`. CI performs:
-
-1. `npm ci`
-2. unit tests
-3. recursive source dependency/rebuild regression checks
-4. development-watch static-file refresh regression check
-5. production release build
-6. release-file and tarball-content validation
-7. Node-free prebuilt installation test
-8. uninstall/reinstall and configuration-preservation checks
-9. Debian package metadata and file-layout validation
-10. Debian config creation, preservation, legacy migration, remove, and purge tests
-11. Node-free `.deb` reconstruction from the prebuilt release tarball
-12. artifact upload
-
-## Edit mode
-
-The pencil button controls Edit mode. While Edit mode is active, management actions become available, including Page settings, JSON import/export, History, group ordering, card actions, and service discovery.
-
-Header, title, and search visibility are independent. Group filtering, Add bookmark, and Edit mode controls remain available even when header/title content is hidden.
-
-Users without administrator privileges can browse and open bookmarks but cannot modify the system configuration.
-
-## Page visibility
-
-Open **Edit mode → Page settings → Visible page elements** to control:
-
-- **Show header** — shows/hides the eyebrow and subtitle header text
-- **Show title** — shows/hides only the main page title
-- **Show search bar** — shows/hides the bookmark text search while keeping the group filter available
-
-All three options default to enabled for existing configurations and preview immediately while Page settings is open. **Save settings** persists the selected values. Hiding Search clears an active text query so bookmarks cannot remain filtered by an invisible search control; hiding Header or Title does not change the selected group filter.
-
-## Bookmark fields
-
-The editor supports:
-
-- `name` — required display name
-- `url` — required primary absolute `http://` or `https://` URL
-- `endpoints` — optional array of additional `{ label, url }` addresses; the primary `url` remains the default
-- `description` — optional secondary text
-- `group` — optional category
-- `icon` — optional emoji or text icon
-- `accent` — optional theme-safe card accent preset (`blue`, `green`, `teal`, `purple`, `orange`, or `red`)
-- `statusCheck` — optional boolean; defaults to enabled and can disable host-side reachability checks for a bookmark
-- `tags` — optional searchable metadata stored as an array
-- `openMode` — optional `same-tab`; omitted/default means new tab
-- `favorite` — optional boolean used for the Favorites section
-
-New or edited bookmarks receive an internal `id` automatically. Existing entries without an `id` remain compatible.
+The built-in package update notice is for installations managed by an APT repository that provides `cockpit-bookmarks`. A locally installed standalone GitHub `.deb` has no newer repository candidate, so the plugin does not claim that an update is available. For standalone `.deb` installations, check GitHub releases when you want to upgrade.
 
 ## Manual configuration
 
-The JSON remains human-readable and may be edited manually:
-
-```bash
-sudo nano /etc/cockpit/cockpit-bookmarks.json
-```
-
-Example:
+A minimal configuration is:
 
 ```json
 {
+  "schemaVersion": 1,
   "title": "Mini PC Services",
   "subtitle": "Services hosted on this mini PC",
   "eyebrow": "Mini PC",
@@ -460,104 +259,64 @@ Example:
 }
 ```
 
-`id`, `displayMode`, `groupOrder`, `eyebrow`, `showEyebrow`, `showHeader`, `showTitle`, `showSearch`, `tags`, `favorite`, and `openMode` are optional for manually created configurations. Missing visibility fields default to `true`. The application also maintains a top-level `history` array after UI changes; it contains up to 10 previous configuration snapshots.
-
-`{host}` is replaced in the browser with the hostname or IP address used to open Cockpit. IPv6 hosts are bracketed automatically. Only absolute `http://` and `https://` targets are accepted.
-
-## Import, export, and live reload
-
-**Export JSON** downloads the current normalized configuration, including history. **Import JSON** validates the replacement before writing it and stores the previous state in History.
-
-The application accepts configuration files up to 1 MiB.
-
-Cockpit's file watcher refreshes the dashboard when the JSON file changes externally. Open editor/settings dialogs keep their unsaved draft state; a later write still uses the atomic `modify()` flow and detects stale bookmark targets.
-
-## Ordering and groups
-
-Bookmark order and group order are independent:
-
-- bookmark drag-and-drop / Move up / Move down is constrained within a group
-- Move to group changes a bookmark's group explicitly
-- group heading ↑ / ↓ controls persist top-level `groupOrder`
-- newly introduced groups are appended predictably
-- stale group-order names are removed during normalization
-
-Collapsed group state is browser-local and is not written into the shared JSON configuration. Active search temporarily exposes matching cards even when their group is collapsed.
+`{host}` is replaced with the host used to open Cockpit; IPv6 URL hosts are bracketed automatically. Bookmark targets are restricted to absolute `http://` and `https://` URLs.
 
 ## Source layout
 
+The main implementation is organized by responsibility rather than one monolithic component:
+
 ```text
 cockpit-bookmarks/
-├── .github/workflows/
-│   ├── ci.yml
-│   └── release.yml
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml
+│   │   ├── codeql.yml
+│   │   └── release.yml
+│   └── dependabot.yml
+├── docs/
 ├── packaging/
-│   ├── build-deb.sh
-│   └── debian/
-│       ├── control.in
-│       ├── postinst
-│       └── postrm
 ├── src/
 │   ├── app.jsx
-│   ├── app.css
-│   ├── bookmark-sections.jsx
-│   ├── bookmark-sections.css
-│   ├── bookmark-ui.js
+│   ├── app-providers.jsx
 │   ├── bookmarks.js
 │   ├── cockpit-config.js
-│   ├── cockpit-dark-theme.js
+│   ├── config-migrations.js
+│   ├── dashboard-header.jsx
+│   ├── use-dashboard-view.js
+│   ├── use-bookmark-management.js
+│   ├── page-settings.js
+│   ├── use-page-settings.js
+│   ├── service-card.jsx
+│   ├── service-runtime.js
+│   ├── launcher-runtime.js
+│   ├── terminal-launcher.js
+│   ├── application-launcher.js
+│   ├── terminal-launcher-manager.jsx
+│   ├── terminal-inspect.js
 │   ├── discovery.js
-│   ├── floating-action-menu.js
-│   ├── floating-action-menu.css
-│   ├── index.jsx
-│   ├── management-dialogs.jsx
-│   ├── management-dialogs.css
-│   ├── manifest.json
-│   ├── native-controls.css
-│   ├── page-visibility.css
-│   ├── service-discovery.jsx
-│   └── service-discovery.css
+│   └── terminal-service-discovery.jsx
 ├── tests/
-│   ├── bookmarks.test.mjs
-│   ├── cockpit-config.test.mjs
-│   ├── deb-package.sh
-│   └── discovery.test.mjs
+├── tests-ui/
 ├── examples/
-│   └── cockpit-bookmarks.json
 ├── build.js
 ├── Makefile
 ├── package.json
 ├── package-lock.json
 ├── CHANGELOG.md
 ├── SECURITY.md
-├── RELEASING.md
-├── ROADMAP.md
-├── LICENSE
 └── README.md
 ```
 
 ## Runtime footprint
 
-Node.js, npm, React source files, tests, and `node_modules/` are not required by the installed plugin. Cockpit serves compiled files from `dist/`; React and PatternFly execute in the browser.
+Node.js, npm, source files, tests, and `node_modules/` are not required after a Debian or prebuilt installation. Cockpit serves the compiled frontend. On-demand launchers, when used, run as transient services in the current user's systemd manager.
 
-## Important limitations
+## Security and limitations
 
-A bookmark cannot make a service listening only on `127.0.0.1` reachable from another computer. Such a service must listen on an appropriate interface or be exposed through a reverse proxy/tunnel.
+- A bookmark cannot make a service bound only to loopback reachable from another computer.
+- Discovery inspects TCP listeners only; it is not an application-health or LAN scanner.
+- Browser and host firewall/TLS/authentication policies still govern access to linked services.
+- Launcher configuration is executable configuration. Do not import it from an untrusted source.
+- Terminal launchers expose an interactive shell according to their bind/auth/write settings; treat them as privileged remote access.
 
-Service discovery detects TCP listeners, not application health. It does not probe the LAN, does not detect UDP-only services, and cannot reliably infer arbitrary HTTP-vs-HTTPS configurations.
-
-Generic service health checks remain intentionally deferred because browser-side probes are unreliable across CORS, authentication, mixed-content restrictions, and self-signed TLS certificates.
-
-Whole-card browsing currently uses application-controlled navigation rather than a literal `<a>` wrapper. Left-click and keyboard activation are supported, but native browser link affordances such as link-specific context menus/middle-click are not yet equivalent to a normal anchor. This has been reviewed for v0.5 and remains a documented follow-up rather than a release blocker.
-
-## Security
-
-See `SECURITY.md` for supported versions, vulnerability reporting, and the extension's security model.
-
-## Changelog
-
-See `CHANGELOG.md` for release notes.
-
-## License
-
-MIT
+See [SECURITY.md](SECURITY.md) for the security model and vulnerability reporting, [CHANGELOG.md](CHANGELOG.md) for release history, and the `docs/` directory for launcher-specific details.
