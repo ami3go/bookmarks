@@ -6,7 +6,6 @@ import {
     formatArgumentLines,
     parseArgumentLines,
     prepareLauncherOutput,
-    probeAddress,
     readLauncherOutput,
     resolveExecutablePath,
     sleep,
@@ -26,7 +25,6 @@ export const TERMINAL_LAUNCHER_TYPE = GOTTY_LAUNCHER_TYPE;
 export const GOTTY_LAUNCHER_PATH_PREFIX = '/cb-gotty-';
 export const TERMINAL_PROVIDER_GOTTY = 'gotty';
 export const TERMINAL_PROVIDER_TTYD = 'ttyd';
-export const TERMINAL_PROVIDERS = [TERMINAL_PROVIDER_GOTTY, TERMINAL_PROVIDER_TTYD];
 
 export const DEFAULT_TERMINAL_LAUNCHER = {
     provider: TERMINAL_PROVIDER_GOTTY,
@@ -38,7 +36,6 @@ export const DEFAULT_TERMINAL_LAUNCHER = {
     // 0 means no RuntimeMaxSec limit. The UI presents this as infinity.
     autoStopMinutes: 0,
 };
-export const DEFAULT_GOTTY_LAUNCHER = DEFAULT_TERMINAL_LAUNCHER;
 
 export function normalizeTerminalProvider(value) {
     return String(value || '').toLowerCase() === TERMINAL_PROVIDER_TTYD
@@ -100,8 +97,6 @@ export function normalizeTerminalLauncher(value = {}) {
             : DEFAULT_TERMINAL_LAUNCHER.autoStopMinutes,
     };
 }
-
-export const normalizeGottyLauncher = normalizeTerminalLauncher;
 
 export function launcherDraft(service = null, suggestedPort = DEFAULT_TERMINAL_LAUNCHER.port) {
     const launcher = normalizeTerminalLauncher(service?.gottyLauncher || {
@@ -202,8 +197,6 @@ export function isNetworkExposedAddress(value) {
     return !(address === '127.0.0.1' || address === 'localhost' || address === '::1' || address.startsWith('127.'));
 }
 
-export { probeAddress };
-
 function addressLooksLikeIp(value) {
     const address = stripLauncherHostBrackets(value).split('%')[0];
     if (address.includes(':'))
@@ -287,8 +280,6 @@ export async function stopTerminalLauncher(cockpit, service) {
     return stopUserUnit(cockpit, launcherUnitName(service.id));
 }
 
-export const stopGoTTYLauncher = stopTerminalLauncher;
-
 async function runtimeTerminalService(cockpit, service, hostname) {
     const launcher = normalizeTerminalLauncher(service.gottyLauncher);
     const expandedAddress = expandLauncherHost(launcher.address, hostname);
@@ -355,5 +346,3 @@ export async function startTerminalLauncher(cockpit, service, hostname = '') {
 
     return { reused: false };
 }
-
-export const startGoTTYLauncher = startTerminalLauncher;
