@@ -70,11 +70,13 @@ test('rewrites aoe url host while preserving token, path, port, and query', () =
     );
 });
 
-test('clicking a running AoE bookmark only fetches aoe url and opens its token URL', async () => {
+test('clicking a running AoE bookmark checks status, fetches aoe url, and opens its token URL', async () => {
     const calls = [];
     const cockpit = {
         spawn: async args => {
             calls.push(args);
+            if (args[1] === 'serve' && args[2] === '--status')
+                return 'running';
             if (args[1] === 'url')
                 return 'http://127.0.0.1:8080/?token=running-token\n';
             throw new Error(`Unexpected command: ${args.join(' ')}`);
@@ -88,24 +90,45 @@ test('clicking a running AoE bookmark only fetches aoe url and opens its token U
         openWindow: () => tab,
     });
 
-    assert.deepEqual(calls, [['/usr/local/bin/aoe', 'url']]);
+    assert.deepEqual(calls, [
+        ['/usr/local/bin/aoe', 'serve', '--status'],
+        ['/usr/local/bin/aoe', 'url'],
+    ]);
+    assert.equal(calls.some(args => args.includes('--daemon')), false);
     assert.deepEqual(navigations, ['http://mini-pc.local:8080/?token=running-token']);
+});
+
+test('a running AoE daemon is never restarted just because aoe url is unavailable', async () => {
+    const calls = [];
+    const cockpit = {
+        spawn: async args => {
+            calls.push(args);
+            if (args[1] === 'serve' && args[2] === '--status')
+                return 'running';
+            if (args[1] === 'url')
+                throw new Error('temporary URL lookup failure');
+            throw new Error(`Unexpected command: ${args.join(' ')}`);
+        },
+    };
+
+    await assert.rejects(
+        () => startAgentOfEmpires(cockpit, aoeService({ startupTimeoutSeconds: 0 }), 'mini-pc.local'),
+        /is running but .*aoe url.*usable token URL/
+    );
+    assert.equal(calls.some(args => args.includes('--daemon')), false);
 });
 
 test('stopped AoE starts as a daemon, then opens the token URL returned by aoe url', async () => {
     const calls = [];
-    let urlCalls = 0;
     const cockpit = {
         spawn: async args => {
             calls.push(args);
-            if (args[1] === 'url') {
-                urlCalls += 1;
-                if (urlCalls === 1)
-                    throw new Error('not running');
-                return 'http://localhost:8080/?token=new-token\n';
-            }
+            if (args[1] === 'serve' && args[2] === '--status')
+                throw new Error('not running');
             if (args[1] === 'serve' && args.includes('--daemon'))
                 return '';
+            if (args[1] === 'url')
+                return 'http://localhost:8080/?token=new-token\n';
             throw new Error(`Unexpected command: ${args.join(' ')}`);
         },
     };
@@ -118,18 +141,15 @@ test('stopped AoE starts as a daemon, then opens the token URL returned by aoe u
 
 test('AoE adds allowed-host when Cockpit is reached by hostname', async () => {
     const calls = [];
-    let urlCalls = 0;
     const cockpit = {
         spawn: async args => {
             calls.push(args);
-            if (args[1] === 'url') {
-                urlCalls += 1;
-                if (urlCalls === 1)
-                    throw new Error('not running');
-                return 'http://127.0.0.1:8080/?token=name-token\n';
-            }
-            if (args[1] === 'serve')
+            if (args[1] === 'serve' && args[2] === '--status')
+                throw new Error('not running');
+            if (args[1] === 'serve' && args.includes('--daemon'))
                 return '';
+            if (args[1] === 'url')
+                return 'http://127.0.0.1:8080/?token=name-token\n';
             throw new Error(`Unexpected command: ${args.join(' ')}`);
         },
     };
