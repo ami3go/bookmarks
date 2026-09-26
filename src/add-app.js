@@ -61,6 +61,8 @@ export function createAddAppDraft(value, port) {
             ...draft,
             args: args.join('\n'),
             bindHost: '0.0.0.0',
+            // AoE is a persistent background service; never auto-stop it by default.
+            autoStopMinutes: '0',
         };
     }
 
