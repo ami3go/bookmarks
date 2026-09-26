@@ -26,6 +26,65 @@ test('legacy configuration migrates launchers into Applications', () => {
     assert.equal(migrated.services[2].group, 'Links');
 });
 
+test('schema 1 migrates existing Agent of Empires timeout to never', () => {
+    const migrated = migrateConfiguration({
+        schemaVersion: 1,
+        services: [{
+            id: 'aoe',
+            type: 'application-launcher',
+            name: 'Agent of Empires',
+            applicationLauncher: {
+                command: 'aoe',
+                args: ['serve', '--host', '0.0.0.0'],
+                urlCommand: 'aoe',
+                urlArgs: ['url'],
+                autoStopMinutes: 120,
+            },
+        }],
+    });
+
+    assert.equal(migrated.schemaVersion, CURRENT_CONFIG_SCHEMA_VERSION);
+    assert.equal(migrated.services[0].applicationLauncher.autoStopMinutes, 0);
+});
+
+test('AoE timeout migration does not change ordinary application launchers', () => {
+    const migrated = migrateConfiguration({
+        schemaVersion: 1,
+        services: [{
+            id: 'custom',
+            type: 'application-launcher',
+            applicationLauncher: {
+                command: 'example-server',
+                args: ['serve'],
+                urlCommand: 'example-server',
+                urlArgs: ['url'],
+                autoStopMinutes: 120,
+            },
+        }],
+    });
+
+    assert.equal(migrated.services[0].applicationLauncher.autoStopMinutes, 120);
+});
+
+test('schema 2 preserves an explicit later AoE timeout choice', () => {
+    const migrated = migrateConfiguration({
+        schemaVersion: 2,
+        services: [{
+            id: 'aoe',
+            type: 'application-launcher',
+            applicationLauncher: {
+                command: 'aoe',
+                args: ['serve'],
+                urlCommand: 'aoe',
+                urlArgs: ['url'],
+                autoStopMinutes: 120,
+            },
+        }],
+    });
+
+    assert.equal(migrated.services[0].applicationLauncher.autoStopMinutes, 120);
+});
+
 test('configuration boundary always exposes migrated normalized config', () => {
     const config = configurationFromContent({
         title: 'Test',
